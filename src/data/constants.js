@@ -75,6 +75,14 @@ export const INITIAL_EXTENSIONS = [
         type: 'source',
         enabled: true
     },
+    {
+        id: 'anitaku-custom-source',
+        name: 'Anitaku',
+        version: '1.0.0',
+        type: 'custom',
+        url: 'https://anitaku.to',
+        enabled: true
+    }
 ];
 
 export const VIDEO_SOURCES = {

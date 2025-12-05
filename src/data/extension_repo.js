@@ -1,5 +1,12 @@
 export const ANIYOMI_SOURCES = [
     {
+        "name": "Anitaku",
+        "lang": "en",
+        "id": "anitaku-custom-source",
+        "baseUrl": "https://anitaku.to",
+        "nsfw": false
+    },
+    {
         "name": "AllAnime",
         "lang": "en",
         "id": "4709139914729853090",

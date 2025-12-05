@@ -8,15 +8,19 @@ import AddSourceModal from './components/extensions/AddSourceModal';
 import DirectPlayModal from './components/player/DirectPlayModal';
 import Toast from './components/common/Toast';
 import { INITIAL_EXTENSIONS } from './data/constants';
-import { Search, Filter, Play, Maximize2, Minimize2, X, Compass, Shuffle } from 'lucide-react';
+import { Search, Filter, Play, Maximize2, Minimize2, X, Compass, Shuffle, Star, PanelRight } from 'lucide-react';
 import { AnilistSource } from './extensions/AnilistSource';
 import { ANIME_KAI_IDS } from './data/anime_ids';
 import HorizontalScrollList from './components/common/HorizontalScrollList';
+import { GogoScraper } from './lib/GogoScraper';
 
 function App() {
     // --- State ---
     const [activeTab, setActiveTab] = useState('home');
     const [isMobileOpen, setIsMobileOpen] = useState(false);
+    const [videoScale, setVideoScale] = useState(1); // Zoom level for player
+    const [videoXOffset, setVideoXOffset] = useState(0); // Horizontal shift (e.g. to crop left sidebar)
+    const [isSidebarVisible, setIsSidebarVisible] = useState(true); // Toggle Episode Sidebar
 
     // Provider State
     const [extensions, setExtensions] = useState(() => {
@@ -263,6 +267,7 @@ function App() {
             const customSource = extensions.find(e => e.enabled && e.type === 'custom' && e.url);
 
             let streamUrl = null;
+            let episodesList = [];
 
             if (customSource) {
                 const baseUrl = customSource.url.replace(/\/$/, '');
@@ -287,6 +292,48 @@ function App() {
                     if (episodeNumber) {
                         streamUrl += `#ep=${episodeNumber}`;
                     }
+                } else if (
+                    customSource.name === 'Anitaku' ||
+                    customSource.name === 'HiAnime' ||
+                    customSource.name === 'HiAnimez' ||
+                    customSource.url.includes('anitaku') ||
+                    customSource.url.includes('hianime')
+                ) {
+                    // Anitaku / HiAnime Hybrid Integration
+                    // 1. Search Anitaku for the Slug (reliable)
+                    // 2. Construct HiAnime formatted URL for Iframe (user preference)
+                    showToast('Searching Anitaku...', 'info');
+                    try {
+                        const title = anime.title.english || anime.title.romaji || anime.title;
+                        const results = await GogoScraper.search(title);
+
+                        if (results && results.length > 0) {
+                            const match = results[0];
+                            console.log("Anitaku Match Slug:", match.id);
+
+                            // Fetch Episode List for Sidebar
+                            try {
+                                episodesList = await GogoScraper.getEpisodes(match.id);
+                            } catch (e) {
+                                console.warn("Failed to fetch episodes list:", e);
+                            }
+
+                            // Construct HiAnime URL Format: https://hianimez.live/watch/slug/ep-num
+                            const targetNum = episodeNumber || 1;
+
+                            // NOTE: HiAnime typically uses 'ep-N' format.
+                            // The user provided custom URL: https://hianimez.live/watch/bleach/ep-1
+                            streamUrl = `https://hianimez.live/watch/${match.id}/ep-${targetNum}`;
+
+                            showToast(`Redirecting to Episode ${targetNum}...`, 'success');
+                        } else {
+                            throw new Error("Anime not found on Anitaku");
+                        }
+                    } catch (err) {
+                        console.error("Anitaku Search Error:", err);
+                        showToast(`Could not find "${anime.title.english || anime.title}" on Anitaku.`, 'error');
+                        return;
+                    }
                 } else {
                     // Generic Search Logic for other sources
                     let queryText = anime.title.english || anime.title.romaji || anime.title;
@@ -301,13 +348,39 @@ function App() {
                 streamUrl = await activeProvider.getStream(anime);
             }
 
+            setVideoScale(1); // Reset zoom on new play
+
             setPlayingAnime({
                 ...anime,
                 streamUrl,
+                episodesList: episodesList || [], // Store fetched episodes
                 title: sanitize(episodeNumber ? `${anime.title} - Episode ${episodeNumber}` : anime.title),
                 name: sanitize(anime.name),
                 synopsis: sanitize(anime.synopsis)
             });
+
+
+
+            // User requested: "when pressing an episode number remove side-bar"
+            if (episodeNumber) {
+                setIsSidebarVisible(false);
+            } else {
+                // Initial load (Watch Now), show sidebar by default
+                setIsSidebarVisible(true);
+            }
+
+            // AUTO-ZOOM: If accessing Anitaku (iframe), zoom in to crop sidebars automatically
+            const isAnitakuSource = (episodesList && episodesList.length > 0) ||
+                (streamUrl && (streamUrl.includes('hianime') || streamUrl.includes('anitaku')));
+
+            if (isAnitakuSource) {
+                setVideoScale(1.5); // 1.5x zoom to aggressively crop Left Sidebar
+                setVideoXOffset(-5); // Shift Left to ensure sidebar is gone
+            } else {
+                setVideoScale(1);
+                setVideoXOffset(0);
+            }
+
         } catch (error) {
             console.error("Play Error", error);
             showToast(`Failed to play: ${error.message}`, 'error');
@@ -364,6 +437,7 @@ function App() {
             name: 'Direct Stream',
             synopsis: 'Directly streaming from: ' + url
         });
+        setVideoScale(1); // Reset zoom on new play
     };
 
     const handleResetExtensions = () => {
@@ -432,32 +506,153 @@ function App() {
         if (playingAnime && !isPlayerMinimized) {
             const targetUrl = playingAnime.url || playingAnime.streamUrl || playingAnime.source;
             return (
-                <div className="p-4 sm:p-8 animate-fade-in">
-                    <button
-                        onClick={() => setPlayingAnime(null)}
-                        className="mb-4 text-gray-400 hover:text-white flex items-center gap-2 transition-colors"
-                    >
-                        &larr; Back to Browse
-                    </button>
-                    <h2 className="text-2xl font-bold text-white mb-4">{playingAnime.title || playingAnime.name}</h2>
-                    {/* Constrain width to "shorten" the player until full screen */}
-                    <div className="max-w-3xl mx-auto">
-                        <div className="w-full h-full relative group">
-                            <VideoPlayer
-                                src={targetUrl}
-                                title={playingAnime.title || playingAnime.name}
-                            />
+                <div className="fixed inset-0 z-50 bg-[#0a0a0a] text-white flex flex-col font-sans animate-fade-in group/player-ui">
+                    {/* Top Navigation Bar (Floating/Hover or Static? Screenshot shows static-ish window controls, let's make it static for usability) */}
+                    <div className="h-14 flex items-center justify-between px-4 bg-black/60 backdrop-blur-md border-b border-white/5 z-20">
+                        <div className="flex items-center gap-4">
+                            <button
+                                onClick={() => setPlayingAnime(null)}
+                                className="p-2 hover:bg-white/10 rounded-full transition-colors"
+                            >
+                                <X size={20} />
+                            </button>
+                            <h2 className="font-semibold text-sm sm:text-base truncate max-w-md cursor-default">
+                                {playingAnime.title}
+                            </h2>
                         </div>
-                        <div className="mt-6 p-6 bg-gray-900 rounded-xl border border-gray-800">
-                            <h3 className="text-lg font-bold text-white mb-2">
-                                {playingAnime.url ? 'Portal Mode' : 'Now Playing'}
-                            </h3>
-                            <div className="flex items-center gap-2 text-sm text-gray-500 mb-4">
-                                <span>Provider: {activeProvider.name}</span>
+
+                        {/* Zoom & Window Controls */}
+                        <div className="flex items-center gap-3">
+                            {/* Zoom Stats */}
+                            <div className="hidden sm:flex items-center bg-gray-800/80 rounded-lg p-1 mr-2 text-xs border border-white/5">
+                                <span className="px-2 text-gray-400 uppercase text-[10px] tracking-wider font-bold">Crop</span>
+                                <button
+                                    onClick={() => setVideoScale(s => Math.max(1, s - 0.1))}
+                                    className="w-6 h-6 flex items-center justify-center hover:bg-white/10 rounded"
+                                    title="Zoom Out"
+                                >
+                                    -
+                                </button>
+                                <span className="w-10 text-center font-mono">{Math.round(videoScale * 100)}%</span>
+                                <button
+                                    onClick={() => setVideoScale(s => Math.min(2.5, s + 0.1))}
+                                    className="w-6 h-6 flex items-center justify-center hover:bg-white/10 rounded"
+                                    title="Zoom In (Crop Sidebars)"
+                                >
+                                    +
+                                </button>
                             </div>
-                            <p className="text-gray-400">
-                                {playingAnime.synopsis || "Enjoy the functionality of Mugen Play with your choice of content provider."}
-                            </p>
+
+                            <button
+                                onClick={() => setIsPlayerMinimized(true)}
+                                className="p-2 hover:bg-white/10 rounded-full transition-colors text-gray-400 hover:text-white"
+                                title="Minimize"
+                            >
+                                <Minimize2 size={20} />
+                            </button>
+
+                            <div className="w-px h-6 bg-white/10 mx-1"></div>
+
+                            <button
+                                onClick={() => setIsSidebarVisible(!isSidebarVisible)}
+                                className={`p-2 rounded-full transition-colors ${isSidebarVisible ? 'bg-white/10 text-white' : 'hover:bg-white/10 text-gray-400'}`}
+                                title="Toggle Sidebar"
+                            >
+                                <PanelRight size={20} />
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Main Content Area: Split View */}
+                    <div className="flex-1 flex overflow-hidden">
+                        {/* LEFT COLUMN: Player & Details */}
+                        <div className={`flex-1 flex flex-col overflow-y-auto custom-scrollbar relative transition-all duration-300`}>
+                            {/* Video Player Container - Theater Mode (16:9 Enforced) */}
+                            <div className="w-full max-w-[180vh] mx-auto aspect-video bg-black relative shadow-2xl z-100 ring-1 ring-white/10">
+                                <VideoPlayer
+                                    src={targetUrl}
+                                    poster={playingAnime.bannerUrl || playingAnime.coverUrl}
+                                    title={playingAnime.title}
+                                    isMinimized={false}
+                                    scale={videoScale}
+                                    xOffset={videoXOffset}
+                                    onToggleMinimize={() => setIsPlayerMinimized(true)}
+                                    onClose={() => setPlayingAnime(null)}
+                                />
+                            </div>
+
+                            {/* Anime Details (Below Player) */}
+                            <div className="p-6 sm:p-8 max-w-5xl space-y-6">
+                                <div className="flex flex-col sm:flex-row gap-6 items-start">
+                                    <img
+                                        src={playingAnime.coverUrl}
+                                        alt="Cover"
+                                        className="w-24 sm:w-32 rounded-lg shadow-lg hidden sm:block"
+                                    />
+                                    <div className="flex-1 space-y-3">
+                                        <h1 className="text-2xl sm:text-3xl font-bold leading-tight">{playingAnime.title}</h1>
+                                        <div className="flex flex-wrap items-center gap-3 text-sm text-gray-400">
+                                            <span className="flex items-center gap-1 text-yellow-500 font-medium">
+                                                <Star size={14} fill="currentColor" /> {playingAnime.rating || 'N/A'}
+                                            </span>
+                                            <span>•</span>
+                                            <span>{playingAnime.year}</span>
+                                            <span>•</span>
+                                            <span>{playingAnime.episodes} Episodes</span>
+                                            <div className="flex gap-2 ml-2">
+                                                {playingAnime.genres?.slice(0, 3).map(g => (
+                                                    <span key={g} className="px-2 py-0.5 bg-white/5 border border-white/10 rounded text-xs">{g}</span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        <p className="text-gray-300 text-sm leading-relaxed max-w-4xl">
+                                            {playingAnime.synopsis}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* RIGHT COLUMN: Sidebar (Episodes) */}
+                        <div className={`${isSidebarVisible ? 'w-80 lg:w-96 translate-x-0' : 'w-0 translate-x-full hidden'} bg-[#111] border-l border-white/5 flex flex-col transition-all duration-300 ease-in-out z-20`}>
+                            <div className="p-4 border-b border-white/5 bg-[#111] z-10 sticky top-0 flex justify-between items-center whitespace-nowrap overflow-hidden">
+                                <h3 className="font-bold text-gray-200">Episodes</h3>
+                                <span className="text-xs text-gray-500">{playingAnime.episodesList?.length || playingAnime.episodes || '?'} Total</span>
+                            </div>
+
+                            <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-2">
+                                {/* Generate list if explicit list is missing */}
+                                {(playingAnime.episodesList || Array.from({ length: playingAnime.episodes || 12 })).map((ep, idx) => {
+                                    const epNum = ep?.number || idx + 1;
+                                    const currentHash = targetUrl.includes(`ep-${epNum}`) || targetUrl.includes(`episode-${epNum}`);
+                                    const isCurrent = currentHash; // loose check
+
+                                    return (
+                                        <button
+                                            key={epNum}
+                                            onClick={() => handlePlay(playingAnime, epNum)}
+                                            className={`w-full flex items-center gap-3 p-3 rounded-lg transition-all group ${isCurrent ? 'bg-red-600 text-white' : 'hover:bg-white/5 text-gray-400'}`}
+                                        >
+                                            <div className="relative shrink-0 w-24 h-16 bg-black/40 rounded overflow-hidden border border-white/5">
+                                                <img
+                                                    src={playingAnime.bannerUrl}
+                                                    className={`w-full h-full object-cover transition-opacity ${isCurrent ? 'opacity-100' : 'opacity-60 group-hover:opacity-100'}`}
+                                                    alt=""
+                                                />
+                                                <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                                                    <Play size={16} fill="currentColor" className={isCurrent ? 'text-white' : 'text-white/50'} />
+                                                </div>
+                                            </div>
+                                            <div className="text-left flex-1 min-w-0">
+                                                <div className="font-medium truncate text-sm">Episode {epNum}</div>
+                                                <div className="text-xs opacity-60 truncate">
+                                                    {playingAnime.title}
+                                                </div>
+                                            </div>
+                                        </button>
+                                    );
+                                })}
+                            </div>
                         </div>
                     </div>
                 </div>
