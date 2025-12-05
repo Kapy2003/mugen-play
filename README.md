@@ -65,6 +65,3 @@ Mugen Play uses a standardized `ExtensionSDK`.
 - **Source Extensions**: Provide metadata (e.g., AniList).
 - **Custom Extensions**: Can be added via the "Extensions" tab to provide video sources.
 
-## 📄 License
-
-MIT License.
