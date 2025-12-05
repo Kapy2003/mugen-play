@@ -1,7 +1,7 @@
 # Mugen Play
 
 <div align="center">
-  <img src="https://anilist.co/img/icons/android-chrome-512x512.png" alt="Mugen Play Logo" width="100" height="100" />
+  <!-- <img src="https://anilist.co/img/icons/android-chrome-512x512.png" alt="Mugen Play Logo" width="100" height="100" /> -->
   <h1>Mugen Play</h1>
   <p><strong>The Ultimate Extension-Based Anime Platform</strong></p>
 </div>
