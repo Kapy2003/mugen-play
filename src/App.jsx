@@ -66,6 +66,7 @@ function App() {
     const [toast, setToast] = useState(null);
     const [showSourceMenu, setShowSourceMenu] = useState(false);
     const [filters, setFilters] = useState({});
+    const [editingExtension, setEditingExtension] = useState(null);
     // History State
     const [watchHistory, setWatchHistory] = useState(() => {
         const saved = localStorage.getItem('mugen_watch_history');
@@ -322,6 +323,13 @@ function App() {
         showToast('Source removed', 'success');
     };
 
+    const handleUpdateSource = (updatedSource) => {
+        const updated = extensions.map(ext => ext.id === updatedSource.id ? updatedSource : ext);
+        saveExtensions(updated);
+        setEditingExtension(null);
+        showToast('Source updated', 'success');
+    };
+
     const handleResetExtensions = () => {
         if (confirm('Are you sure you want to restore default extensions? Custom sources will be kept.')) {
             // Keep custom sources, but restore defaults if missing
@@ -426,8 +434,15 @@ function App() {
                     <ExtensionsView
                         extensions={extensions}
                         onToggle={handleToggleExtension}
-                        onAddSource={() => setShowAddSource(true)}
+                        onAddSource={() => {
+                            setEditingExtension(null); // Ensure add mode
+                            setShowAddSource(true);
+                        }}
                         onInstallExtension={handleAddSource}
+                        onEditExtension={(ext) => {
+                            setEditingExtension(ext);
+                            setShowAddSource(true);
+                        }}
                         onRemove={handleRemoveSource}
                         onReset={handleResetExtensions}
                     />
@@ -964,8 +979,13 @@ function App() {
 
             <AddSourceModal
                 isOpen={showAddSource}
-                onClose={() => setShowAddSource(false)}
+                onClose={() => {
+                    setShowAddSource(false);
+                    setEditingExtension(null);
+                }}
                 onAdd={handleAddSource}
+                onEdit={handleUpdateSource}
+                initialData={editingExtension}
             />
 
             {toast && (

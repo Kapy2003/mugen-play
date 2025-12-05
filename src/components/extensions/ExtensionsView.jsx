@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Plus, Trash2, Settings as Cog, Puzzle, RotateCcw, Power, ShoppingBag } from 'lucide-react';
 import ExtensionStoreModal from './ExtensionStoreModal';
 
-const ExtensionsView = ({ extensions, onToggle, onAddSource, onInstallExtension, onRemove, onReset }) => {
+const ExtensionsView = ({ extensions, onToggle, onAddSource, onInstallExtension, onEditExtension, onRemove, onReset }) => {
     const [isStoreOpen, setIsStoreOpen] = useState(false);
 
     return (
@@ -64,7 +64,10 @@ const ExtensionsView = ({ extensions, onToggle, onAddSource, onInstallExtension,
                                 <Puzzle className="w-6 h-6 text-gray-400" />
                             </div>
                             <div className="flex items-center gap-2">
-                                <button className="p-2 text-gray-500 hover:text-white transition-colors">
+                                <button
+                                    className={`p-2 transition-colors ${ext.type === 'custom' ? 'text-gray-500 hover:text-white cursor-pointer' : 'text-gray-700 cursor-not-allowed invisible'}`}
+                                    onClick={() => ext.type === 'custom' && onEditExtension && onEditExtension(ext)}
+                                >
                                     <Cog className="w-4 h-4" />
                                 </button>
                                 {(() => {
