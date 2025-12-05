@@ -243,7 +243,7 @@ function App() {
             setIsPlayerMinimized(false); // Start normal size (but "short"/constrained width)
             addToHistory(anime); // Add to history
 
-            // If it's a portal/external extension (from our previous step), handle it:
+            // 1. Check if it's a direct custom item (already has URL)
             if (anime.url && anime.type === 'custom') {
                 setPlayingAnime({
                     ...anime,
@@ -254,8 +254,28 @@ function App() {
                 return;
             }
 
-            // Standard Anime Source logic
-            const streamUrl = await activeProvider.getStream(anime);
+            // 2. Check for enabled "Custom Source" extensions (Portals)
+            // If user has added a custom source (e.g. hianime.to), we use it to "play" (search/embed)
+            const customSource = extensions.find(e => e.enabled && e.type === 'custom' && e.url);
+
+            let streamUrl = null;
+
+            if (customSource) {
+                // Construct a search/watch URL for the portal
+                // Most streaming sites support /search?q=TITLE or /search?keyword=TITLE
+                // We'll send BOTH to be safe, as most sites ignore extra params.
+                const searchQuery = encodeURIComponent(anime.title.english || anime.title.romaji || anime.title);
+
+                // Heuristic: If URL ends with /, remove it
+                const baseUrl = customSource.url.replace(/\/$/, '');
+
+                // Try to cover both common patterns
+                streamUrl = `${baseUrl}/search?q=${searchQuery}&keyword=${searchQuery}`;
+            } else {
+                // 3. Fallback to Active Provider (AniList Trailer)
+                streamUrl = await activeProvider.getStream(anime);
+            }
+
             setPlayingAnime({
                 ...anime,
                 streamUrl,
@@ -407,6 +427,7 @@ function App() {
                         extensions={extensions}
                         onToggle={handleToggleExtension}
                         onAddSource={() => setShowAddSource(true)}
+                        onInstallExtension={handleAddSource}
                         onRemove={handleRemoveSource}
                         onReset={handleResetExtensions}
                     />

@@ -59,11 +59,12 @@ The app uses a public/dev Client ID by default. To use your own:
 3.  Open `src/App.jsx`.
 4.  Replace the `CLIENT_ID` constant with your new ID.
 
-## 🧩 Extension System
-
-Mugen Play uses a standardized `ExtensionSDK`.
-- **Source Extensions**: Provide metadata (e.g., AniList).
-- **Custom Extensions**: Can be added via the "Extensions" tab to provide video sources.
+### 🔌 Extension System
+- **Community Store**: Browse and install over 100+ community-sourced extensions (Aniyomi compatible sources) directly from the app.
+- **Custom Sources**: Add your own sources via URL.
+- **Portal Mode**: Validates and embeds external sites for video playback while keeping AniList tracking.
+- **Toggle/Remove**: Manage your active sources easily.
+- **Auto-Search**: Automatically searches installed portals for the anime you are trying to watch.
 
 ## 📄 License
 

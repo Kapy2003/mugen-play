@@ -1,7 +1,7 @@
-import { useState } from 'react';
-import { X, Globe, Lock, Key, Check } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { X, Globe, Lock, Key, Check, Save } from 'lucide-react';
 
-const AddSourceModal = ({ isOpen, onClose, onAdd }) => {
+const AddSourceModal = ({ isOpen, onClose, onAdd, onEdit, initialData = null }) => {
     const [formData, setFormData] = useState({
         name: '',
         url: '',
@@ -9,27 +9,54 @@ const AddSourceModal = ({ isOpen, onClose, onAdd }) => {
         password: ''
     });
 
+    useEffect(() => {
+        if (isOpen && initialData) {
+            setFormData({
+                name: initialData.name || '',
+                url: initialData.url || '',
+                username: initialData.username || '',
+                password: initialData.password || ''
+            });
+        } else if (isOpen) {
+            setFormData({
+                name: '',
+                url: '',
+                username: '',
+                password: ''
+            });
+        }
+    }, [isOpen, initialData]);
+
     const handleSubmit = (e) => {
         e.preventDefault();
 
-        onAdd({
-            ...formData,
-            id: Date.now().toString(),
-            type: 'custom', // Default to 'custom' for URL-added sources
-            enabled: true,
-            status: 'installed',
-            version: '1.0.0',
-        });
+        if (initialData && onEdit) {
+            onEdit({
+                ...initialData,
+                ...formData
+            });
+        } else {
+            onAdd({
+                ...formData,
+                id: Date.now().toString(),
+                type: 'custom', // Default to 'custom' for URL-added sources
+                enabled: true,
+                status: 'installed',
+                version: '1.0.0',
+            });
+        }
         onClose();
     };
 
     if (!isOpen) return null;
 
+    const isEdit = !!initialData;
+
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
             <div className="w-full max-w-md bg-gray-900 rounded-2xl border border-gray-800 shadow-2xl overflow-hidden animate-scale-in">
                 <div className="p-6 border-b border-gray-800 flex items-center justify-between">
-                    <h3 className="text-xl font-bold text-white">Add Custom Source</h3>
+                    <h3 className="text-xl font-bold text-white">{isEdit ? 'Edit Source' : 'Add Custom Source'}</h3>
                     <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors">
                         <X className="w-5 h-5" />
                     </button>
@@ -95,8 +122,8 @@ const AddSourceModal = ({ isOpen, onClose, onAdd }) => {
                             type="submit"
                             className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2"
                         >
-                            <Check className="w-5 h-5" />
-                            Add Source
+                            {isEdit ? <Save className="w-5 h-5" /> : <Check className="w-5 h-5" />}
+                            {isEdit ? 'Save Changes' : 'Add Source'}
                         </button>
                     </div>
                 </form>

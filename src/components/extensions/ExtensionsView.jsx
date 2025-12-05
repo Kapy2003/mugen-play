@@ -1,6 +1,10 @@
-import { Plus, Trash2, Settings as Cog, Puzzle, RotateCcw, Power } from 'lucide-react';
+import { useState } from 'react';
+import { Plus, Trash2, Settings as Cog, Puzzle, RotateCcw, Power, ShoppingBag } from 'lucide-react';
+import ExtensionStoreModal from './ExtensionStoreModal';
 
-const ExtensionsView = ({ extensions, onToggle, onAddSource, onRemove, onReset }) => {
+const ExtensionsView = ({ extensions, onToggle, onAddSource, onInstallExtension, onRemove, onReset }) => {
+    const [isStoreOpen, setIsStoreOpen] = useState(false);
+
     return (
         <div className="p-4 sm:p-8 animate-fade-in">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
@@ -17,6 +21,13 @@ const ExtensionsView = ({ extensions, onToggle, onAddSource, onRemove, onReset }
                         <RotateCcw className="w-5 h-5" />
                     </button>
                     <button
+                        onClick={() => setIsStoreOpen(true)}
+                        className="flex items-center gap-2 px-6 py-3 bg-[#02A9FF] hover:bg-[#02A9FF]/80 text-white rounded-xl font-medium transition-colors whitespace-nowrap shadow-lg shadow-[#02A9FF]/20"
+                    >
+                        <ShoppingBag className="w-5 h-5" />
+                        Browse Store
+                    </button>
+                    <button
                         onClick={onAddSource}
                         className="flex items-center gap-2 px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-medium transition-colors whitespace-nowrap"
                     >
@@ -25,6 +36,16 @@ const ExtensionsView = ({ extensions, onToggle, onAddSource, onRemove, onReset }
                     </button>
                 </div>
             </div>
+
+            <ExtensionStoreModal
+                isOpen={isStoreOpen}
+                onClose={() => setIsStoreOpen(false)}
+                onInstall={(source) => {
+                    onInstallExtension(source);
+                    // Don't close store immediately, user might want to install more
+                }}
+                installedIds={extensions.map(e => e.id)}
+            />
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {extensions.map((ext) => (
