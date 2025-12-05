@@ -1,6 +1,6 @@
-import { Home, Compass, Heart, Film, Settings, LogOut, LogIn, Search, Menu, X } from 'lucide-react';
+import { Home, Compass, Heart, Film, Settings, LogOut, LogIn, Search, Menu, X, Link } from 'lucide-react';
 
-const Sidebar = ({ activeTab, onTabChange, isMobileOpen, setIsMobileOpen, searchQuery, onSearch, user, onLogin, onLogout }) => {
+const Sidebar = ({ activeTab, onTabChange, isMobileOpen, setIsMobileOpen, searchQuery, onSearch, user, onLogin, onLogout, onOpenDirectPlay }) => {
     const menuItems = [
         { id: 'home', label: 'Home', icon: Home },
         { id: 'browse', label: 'Browse', icon: Compass },
@@ -45,7 +45,7 @@ const Sidebar = ({ activeTab, onTabChange, isMobileOpen, setIsMobileOpen, search
                     </button>
 
                     {/* Search */}
-                    <div className="px-2 mb-6">
+                    <div className="px-2 mb-2">
                         <div className="relative group">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-red-500 transition-colors" />
                             <input
@@ -62,6 +62,17 @@ const Sidebar = ({ activeTab, onTabChange, isMobileOpen, setIsMobileOpen, search
                                 className="w-full bg-black/40 border border-gray-800 text-sm text-white rounded-xl pl-10 pr-4 py-3 focus:outline-none focus:border-red-500/50 focus:ring-1 focus:ring-red-500/50 transition-all placeholder:text-gray-600"
                             />
                         </div>
+                    </div>
+
+                    {/* Direct Play */}
+                    <div className="px-2 mb-6">
+                        <button
+                            onClick={onOpenDirectPlay}
+                            className="w-full flex items-center gap-3 px-4 py-3 bg-gray-800/50 hover:bg-gray-800 text-gray-400 hover:text-white rounded-xl transition-all border border-transparent hover:border-gray-700 group"
+                        >
+                            <Link className="w-4 h-4 text-gray-500 group-hover:text-red-500 transition-colors" />
+                            <span className="text-sm font-medium">Direct Stream</span>
+                        </button>
                     </div>
 
                     {/* Navigation */}

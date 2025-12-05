@@ -5,10 +5,12 @@ import AnimeDetailModal from './components/anime/AnimeDetailModal';
 import VideoPlayer from './components/player/VideoPlayer';
 import ExtensionsView from './components/extensions/ExtensionsView';
 import AddSourceModal from './components/extensions/AddSourceModal';
+import DirectPlayModal from './components/player/DirectPlayModal';
 import Toast from './components/common/Toast';
 import { INITIAL_EXTENSIONS } from './data/constants';
 import { Search, Filter, Play, Maximize2, Minimize2, X, Compass, Shuffle } from 'lucide-react';
 import { AnilistSource } from './extensions/AnilistSource';
+import { ANIME_KAI_IDS } from './data/anime_ids';
 import HorizontalScrollList from './components/common/HorizontalScrollList';
 
 function App() {
@@ -63,6 +65,7 @@ function App() {
     const [playingAnime, setPlayingAnime] = useState(null);
     const [isPlayerMinimized, setIsPlayerMinimized] = useState(false);
     const [showAddSource, setShowAddSource] = useState(false);
+    const [showDirectPlay, setShowDirectPlay] = useState(false);
     const [toast, setToast] = useState(null);
     const [showSourceMenu, setShowSourceMenu] = useState(false);
     const [filters, setFilters] = useState({});
@@ -238,7 +241,7 @@ function App() {
     // The previous implementation was used in render. I'll replace usages with direct access or identity.
     const sanitize = (text) => text; // Identity function to avoid breaking existing calls
 
-    const handlePlay = async (anime) => {
+    const handlePlay = async (anime, episodeNumber = null) => {
         try {
             setSelectedAnime(null);
             setIsPlayerMinimized(false); // Start normal size (but "short"/constrained width)
@@ -262,16 +265,37 @@ function App() {
             let streamUrl = null;
 
             if (customSource) {
-                // Construct a search/watch URL for the portal
-                // Most streaming sites support /search?q=TITLE or /search?keyword=TITLE
-                // We'll send BOTH to be safe, as most sites ignore extra params.
-                const searchQuery = encodeURIComponent(anime.title.english || anime.title.romaji || anime.title);
-
-                // Heuristic: If URL ends with /, remove it
                 const baseUrl = customSource.url.replace(/\/$/, '');
 
-                // Try to cover both common patterns
-                streamUrl = `${baseUrl}/search?q=${searchQuery}&keyword=${searchQuery}`;
+                if (customSource.name === 'AnimeKai') {
+                    // Direct URL Construction (User Request)
+                    // Format: /watch/[slugified-title]-[suffix]#ep=[num]
+                    const title = anime.title.english || anime.title.romaji || anime.title;
+                    let slug = title.toLowerCase()
+                        .replace(/[^a-z0-9\s-]/g, '') // Remove special chars
+                        .trim()
+                        .replace(/\s+/g, '-');        // Spaces to hyphens
+
+                    // Check for manual mapping extension
+                    // We need to dynamic import or just assume it's imported at top (I will add import)
+                    const suffix = ANIME_KAI_IDS[anime.id];
+                    if (suffix) {
+                        slug += `-${suffix}`;
+                    }
+
+                    streamUrl = `${baseUrl}/watch/${slug}`;
+                    if (episodeNumber) {
+                        streamUrl += `#ep=${episodeNumber}`;
+                    }
+                } else {
+                    // Generic Search Logic for other sources
+                    let queryText = anime.title.english || anime.title.romaji || anime.title;
+                    if (episodeNumber) {
+                        queryText += ` Episode ${episodeNumber}`;
+                    }
+                    const searchQuery = encodeURIComponent(queryText);
+                    streamUrl = `${baseUrl}/search?q=${searchQuery}&keyword=${searchQuery}`;
+                }
             } else {
                 // 3. Fallback to Active Provider (AniList Trailer)
                 streamUrl = await activeProvider.getStream(anime);
@@ -280,7 +304,7 @@ function App() {
             setPlayingAnime({
                 ...anime,
                 streamUrl,
-                title: sanitize(anime.title),
+                title: sanitize(episodeNumber ? `${anime.title} - Episode ${episodeNumber}` : anime.title),
                 name: sanitize(anime.name),
                 synopsis: sanitize(anime.synopsis)
             });
@@ -330,6 +354,18 @@ function App() {
         showToast('Source updated', 'success');
     };
 
+    const handleDirectPlay = (url) => {
+        setSelectedAnime(null);
+        setIsPlayerMinimized(false);
+        setPlayingAnime({
+            url: url,
+            type: 'custom',
+            title: 'Direct Stream',
+            name: 'Direct Stream',
+            synopsis: 'Directly streaming from: ' + url
+        });
+    };
+
     const handleResetExtensions = () => {
         if (confirm('Are you sure you want to restore default extensions? Custom sources will be kept.')) {
             // Keep custom sources, but restore defaults if missing
@@ -344,7 +380,7 @@ function App() {
             const unique = Array.from(new Map(merged.map(item => [item.id, item])).values());
 
             saveExtensions(unique);
-            setActiveProvider(defaultAnilist); // Reset to Anilist
+            // setActiveProvider(defaultAnilist); // Removed: activeProvider is static
             showToast('Default extensions restored', 'success');
         }
     };
@@ -899,6 +935,7 @@ function App() {
                 setIsMobileOpen={setIsMobileOpen}
                 searchQuery={searchQuery}
                 onSearch={setSearchQuery}
+                onOpenDirectPlay={() => setShowDirectPlay(true)}
             />
 
             <main className="lg:ml-64 min-h-screen pb-20 lg:pb-0 relative">
@@ -986,6 +1023,12 @@ function App() {
                 onAdd={handleAddSource}
                 onEdit={handleUpdateSource}
                 initialData={editingExtension}
+            />
+
+            <DirectPlayModal
+                isOpen={showDirectPlay}
+                onClose={() => setShowDirectPlay(false)}
+                onPlay={handleDirectPlay}
             />
 
             {toast && (

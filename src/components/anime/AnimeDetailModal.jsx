@@ -93,6 +93,28 @@ const AnimeDetailModal = ({ anime, onClose, onPlay }) => {
                                 {anime.synopsis}
                             </p>
 
+                            {/* Episode List */}
+                            <div className="pt-6 border-t border-gray-800">
+                                <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                                    Episodes
+                                    <span className="text-xs font-normal text-gray-500 bg-gray-800 px-2 py-0.5 rounded-full">{anime.episodes || '?'}</span>
+                                </h3>
+                                <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+                                    {Array.from({ length: anime.episodes || 12 }).map((_, i) => {
+                                        const epNum = i + 1;
+                                        return (
+                                            <button
+                                                key={epNum}
+                                                onClick={() => onPlay(anime, epNum)}
+                                                className="px-2 py-2 rounded-lg bg-gray-800 hover:bg-red-600 text-gray-300 hover:text-white text-sm font-medium transition-colors border border-gray-700 hover:border-red-500"
+                                            >
+                                                {epNum}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
                             <div className="flex flex-wrap gap-3 pt-4">
                                 <button
                                     onClick={() => onPlay(anime)}
