@@ -302,39 +302,52 @@ function App() {
                     customSource.url.includes('hianime')
                 ) {
                     // Anitaku / HiAnime Hybrid Integration
-                    // 1. Search Anitaku for the Slug (reliable)
-                    // 2. Construct HiAnime formatted URL for Iframe (user preference)
-                    showToast('Searching Anitaku...', 'info');
-                    try {
-                        const title = anime.title.english || anime.title.romaji || anime.title;
-                        const results = await GogoScraper.search(title);
+                    let slug = anime.sourceId; // Reuse slug if already found
+                    let foundEpisodes = null;
 
-                        if (results && results.length > 0) {
-                            const match = results[0];
-                            console.log("Anitaku Match Slug:", match.id);
+                    if (!slug) {
+                        // 1. Search Anitaku for the Slug if not already known
+                        showToast('Searching Anitaku...', 'info');
+                        try {
+                            const title = anime.title.english || anime.title.romaji || anime.title;
+                            // Clean title for better search (remove " - Episode X" suffix if present)
+                            const cleanTitle = title.split(' - Episode')[0];
+                            const results = await GogoScraper.search(cleanTitle);
 
-                            // Fetch Episode List for Sidebar
+                            if (results && results.length > 0) {
+                                const match = results[0];
+                                slug = match.id;
+                                console.log("Anitaku Match Slug:", slug);
+                            } else {
+                                throw new Error("Anime not found on Anitaku");
+                            }
+                        } catch (err) {
+                            console.error("Anitaku Search Error:", err);
+                            showToast(`Could not find "${anime.title.english || anime.title}" on Anitaku.`, 'error');
+                            return;
+                        }
+                    }
+
+                    if (slug) {
+                        // Fetch Episode List for Sidebar if needed
+                        if (!anime.episodesList || anime.episodesList.length === 0) {
                             try {
-                                episodesList = await GogoScraper.getEpisodes(match.id);
+                                foundEpisodes = await GogoScraper.getEpisodes(slug);
+                                episodesList = foundEpisodes;
                             } catch (e) {
+                                // ensure we keep existing list if fetch fails but we have one
+                                if (anime.episodesList) episodesList = anime.episodesList;
                                 console.warn("Failed to fetch episodes list:", e);
                             }
-
-                            // Construct HiAnime URL Format: https://hianimez.live/watch/slug/ep-num
-                            const targetNum = episodeNumber || 1;
-
-                            // NOTE: HiAnime typically uses 'ep-N' format.
-                            // The user provided custom URL: https://hianimez.live/watch/bleach/ep-1
-                            streamUrl = `https://hianimez.live/watch/${match.id}/ep-${targetNum}`;
-
-                            showToast(`Redirecting to Episode ${targetNum}...`, 'success');
                         } else {
-                            throw new Error("Anime not found on Anitaku");
+                            episodesList = anime.episodesList;
                         }
-                    } catch (err) {
-                        console.error("Anitaku Search Error:", err);
-                        showToast(`Could not find "${anime.title.english || anime.title}" on Anitaku.`, 'error');
-                        return;
+
+                        // Construct HiAnime URL Format: https://hianimez.live/watch/slug/ep-num
+                        const targetNum = episodeNumber || 1;
+                        streamUrl = `https://hianimez.live/watch/${slug}/ep-${targetNum}`;
+
+                        showToast(`Redirecting to Episode ${targetNum}...`, 'success');
                     }
                 } else {
                     // Generic Search Logic for other sources
@@ -352,24 +365,21 @@ function App() {
 
             setVideoScale(1); // Reset zoom on new play
 
+            // Clean title to prevent accumulating suffixes (e.g. "Title - Episode 1 - Episode 2")
+            const baseTitle = (anime.title.english || anime.title.romaji || anime.title || '').split(' - Episode')[0];
+
             setPlayingAnime({
                 ...anime,
                 streamUrl,
                 episodesList: episodesList || [], // Store fetched episodes
-                title: sanitize(episodeNumber ? `${anime.title} - Episode ${episodeNumber}` : anime.title),
+                sourceId: anime.sourceId || (customSource && customSource.name === 'AnimeKai' ? null : (typeof slug !== 'undefined' ? slug : null)), // persist slug if found
+                title: sanitize(episodeNumber ? `${baseTitle} - Episode ${episodeNumber}` : baseTitle),
                 name: sanitize(anime.name),
                 synopsis: sanitize(anime.synopsis)
             });
 
-
-
-            // User requested: "when pressing an episode number remove side-bar"
-            if (episodeNumber) {
-                setIsSidebarVisible(false);
-            } else {
-                // Initial load (Watch Now), show sidebar by default
-                setIsSidebarVisible(true);
-            }
+            // Force Sidebar Open (User Request: Default Open)
+            setIsSidebarVisible(true);
 
             // AUTO-ZOOM: If accessing Anitaku (iframe), zoom in to crop sidebars automatically
             const isAnitakuSource = (episodesList && episodesList.length > 0) ||
@@ -632,7 +642,7 @@ function App() {
                                             <div className="text-left flex-1 min-w-0">
                                                 <div className="font-medium truncate text-sm">Episode {epNum}</div>
                                                 <div className="text-xs opacity-60 truncate">
-                                                    {playingAnime.title}
+                                                    {ep?.title || (playingAnime.title ? playingAnime.title.split(' - Episode')[0] : '')}
                                                 </div>
                                             </div>
                                         </button>
