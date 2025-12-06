@@ -20,6 +20,7 @@ function App() {
     const [isMobileOpen, setIsMobileOpen] = useState(false);
     const [videoScale, setVideoScale] = useState(1); // Zoom level for player
     const [videoXOffset, setVideoXOffset] = useState(0); // Horizontal shift (e.g. to crop left sidebar)
+    const [videoYOffset, setVideoYOffset] = useState(-60); // Vertical shift (Top Crop in px)
     const [isSidebarVisible, setIsSidebarVisible] = useState(true); // Toggle Episode Sidebar
 
     // Provider State
@@ -248,7 +249,8 @@ function App() {
     const handlePlay = async (anime, episodeNumber = null) => {
         try {
             setSelectedAnime(null);
-            setIsPlayerMinimized(false); // Start normal size (but "short"/constrained width)
+            setIsPlayerMinimized(false); // Start normal size
+            setIsSidebarVisible(true); // Force Sidebar Open by default
             addToHistory(anime); // Add to history
 
             // 1. Check if it's a direct custom item (already has URL)
@@ -374,11 +376,13 @@ function App() {
                 (streamUrl && (streamUrl.includes('hianime') || streamUrl.includes('anitaku')));
 
             if (isAnitakuSource) {
-                setVideoScale(1.5); // 1.5x zoom to aggressively crop Left Sidebar
-                setVideoXOffset(-5); // Shift Left to ensure sidebar is gone
+                setVideoScale(1.0); // Hardcoded: 100% Crop
+                setVideoXOffset(0); // Hardcoded: 0 Pos
+                setVideoYOffset(-100); // Hardcoded: -100 Top
             } else {
                 setVideoScale(1);
                 setVideoXOffset(0);
+                setVideoYOffset(0); // Reset for others
             }
 
         } catch (error) {
@@ -507,7 +511,7 @@ function App() {
             const targetUrl = playingAnime.url || playingAnime.streamUrl || playingAnime.source;
             return (
                 <div className="fixed inset-0 z-50 bg-[#0a0a0a] text-white flex flex-col font-sans animate-fade-in group/player-ui">
-                    {/* Top Navigation Bar (Floating/Hover or Static? Screenshot shows static-ish window controls, let's make it static for usability) */}
+                    {/* Top Navigation Bar */}
                     <div className="h-14 flex items-center justify-between px-4 bg-black/60 backdrop-blur-md border-b border-white/5 z-20">
                         <div className="flex items-center gap-4">
                             <button
@@ -521,28 +525,8 @@ function App() {
                             </h2>
                         </div>
 
-                        {/* Zoom & Window Controls */}
+                        {/* Window Controls (Zoom/Pan removed as requested) */}
                         <div className="flex items-center gap-3">
-                            {/* Zoom Stats */}
-                            <div className="hidden sm:flex items-center bg-gray-800/80 rounded-lg p-1 mr-2 text-xs border border-white/5">
-                                <span className="px-2 text-gray-400 uppercase text-[10px] tracking-wider font-bold">Crop</span>
-                                <button
-                                    onClick={() => setVideoScale(s => Math.max(1, s - 0.1))}
-                                    className="w-6 h-6 flex items-center justify-center hover:bg-white/10 rounded"
-                                    title="Zoom Out"
-                                >
-                                    -
-                                </button>
-                                <span className="w-10 text-center font-mono">{Math.round(videoScale * 100)}%</span>
-                                <button
-                                    onClick={() => setVideoScale(s => Math.min(2.5, s + 0.1))}
-                                    className="w-6 h-6 flex items-center justify-center hover:bg-white/10 rounded"
-                                    title="Zoom In (Crop Sidebars)"
-                                >
-                                    +
-                                </button>
-                            </div>
-
                             <button
                                 onClick={() => setIsPlayerMinimized(true)}
                                 className="p-2 hover:bg-white/10 rounded-full transition-colors text-gray-400 hover:text-white"
@@ -564,11 +548,12 @@ function App() {
                     </div>
 
                     {/* Main Content Area: Split View */}
-                    <div className="flex-1 flex overflow-hidden">
+                    < div className="flex-1 flex overflow-hidden" >
                         {/* LEFT COLUMN: Player & Details */}
-                        <div className={`flex-1 flex flex-col overflow-y-auto custom-scrollbar relative transition-all duration-300`}>
-                            {/* Video Player Container - Theater Mode (16:9 Enforced) */}
-                            <div className="w-full max-w-[180vh] mx-auto aspect-video bg-black relative shadow-2xl z-100 ring-1 ring-white/10">
+                        < div className={`flex-1 flex flex-col overflow-y-auto custom-scrollbar relative transition-all duration-300`
+                        }>
+                            {/* Video Player Container - Reduced Size */}
+                            < div className="w-full max-w-[100vh] mx-auto aspect-video bg-black relative shadow-2xl z-100 ring-1 ring-white/10" >
                                 <VideoPlayer
                                     src={targetUrl}
                                     poster={playingAnime.bannerUrl || playingAnime.coverUrl}
@@ -576,14 +561,15 @@ function App() {
                                     isMinimized={false}
                                     scale={videoScale}
                                     xOffset={videoXOffset}
+                                    yOffset={videoYOffset}
                                     onToggleMinimize={() => setIsPlayerMinimized(true)}
                                     onClose={() => setPlayingAnime(null)}
                                 />
-                            </div>
+                            </div >
 
                             {/* Anime Details (Below Player) */}
-                            <div className="p-6 sm:p-8 max-w-5xl space-y-6">
-                                <div className="flex flex-col sm:flex-row gap-6 items-start">
+                            < div className="p-6 sm:p-8 max-w-5xl space-y-6 mt-25" >
+                                <div className="flex flex-col sm:flex-row gap-4 items-start">
                                     <img
                                         src={playingAnime.coverUrl}
                                         alt="Cover"
@@ -610,19 +596,19 @@ function App() {
                                         </p>
                                     </div>
                                 </div>
-                            </div>
-                        </div>
+                            </div >
+                        </div >
 
                         {/* RIGHT COLUMN: Sidebar (Episodes) */}
-                        <div className={`${isSidebarVisible ? 'w-80 lg:w-96 translate-x-0' : 'w-0 translate-x-full hidden'} bg-[#111] border-l border-white/5 flex flex-col transition-all duration-300 ease-in-out z-20`}>
+                        < div className={`${isSidebarVisible ? 'w-80 lg:w-96 translate-x-0' : 'w-0 translate-x-full hidden'} bg-[#111] border-l border-white/5 flex flex-col transition-all duration-300 ease-in-out z-20`}>
                             <div className="p-4 border-b border-white/5 bg-[#111] z-10 sticky top-0 flex justify-between items-center whitespace-nowrap overflow-hidden">
                                 <h3 className="font-bold text-gray-200">Episodes</h3>
                                 <span className="text-xs text-gray-500">{playingAnime.episodesList?.length || playingAnime.episodes || '?'} Total</span>
                             </div>
 
                             <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-2">
-                                {/* Generate list if explicit list is missing */}
-                                {(playingAnime.episodesList || Array.from({ length: playingAnime.episodes || 12 })).map((ep, idx) => {
+                                {/* Generate list if explicit list is missing or empty */}
+                                {((playingAnime.episodesList?.length > 0 && playingAnime.episodesList) || Array.from({ length: playingAnime.episodes || 12 })).map((ep, idx) => {
                                     const epNum = ep?.number || idx + 1;
                                     const currentHash = targetUrl.includes(`ep-${epNum}`) || targetUrl.includes(`episode-${epNum}`);
                                     const isCurrent = currentHash; // loose check
@@ -653,9 +639,9 @@ function App() {
                                     );
                                 })}
                             </div>
-                        </div>
-                    </div>
-                </div>
+                        </div >
+                    </div >
+                </div >
             );
         }
 
@@ -1136,8 +1122,8 @@ function App() {
             <main className="lg:ml-64 min-h-screen pb-20 lg:pb-0 relative">
                 {renderContent()}
 
-                {/* Persistent Player Overlay */}
-                {playingAnime && (
+                {/* Persistent Player Overlay (Only when minimized) */}
+                {playingAnime && isPlayerMinimized && (
                     <div
                         className={`
                             fixed z-50 transition-all duration-300 shadow-2xl overflow-hidden bg-black

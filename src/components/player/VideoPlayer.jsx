@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { ExternalLink, RefreshCw, Settings, Check } from 'lucide-react';
 import Hls from 'hls.js';
 
-const VideoPlayer = ({ src, title, onEnded, scale = 1, xOffset = 0 }) => {
+const VideoPlayer = ({ src, title, onEnded, scale = 1, xOffset = 0, yOffset = -60 }) => {
     const [loadError, setLoadError] = useState(false);
     const [key, setKey] = useState(0); // To force reload iframe/video
     const [playerType, setPlayerType] = useState('iframe'); // 'iframe', 'native', 'hls'
@@ -169,12 +169,13 @@ const VideoPlayer = ({ src, title, onEnded, scale = 1, xOffset = 0 }) => {
         return (
             <iframe
                 key={key}
-                className="absolute inset-0 w-full h-full transition-transform duration-300 origin-top"
+                className="absolute inset-0 w-full h-full transition-transform duration-300 origin-center"
                 style={{
-                    marginTop: '-65px',
-                    height: 'calc(100% + 65px)',
-                    transform: `scale(${scale}) translateY(${10 * (scale - 1)}%) translateX(${xOffset}%)` // Adjust vertical offset when zooming
+                    marginTop: `${yOffset}px`,
+                    height: `calc(100% + ${Math.abs(yOffset)}px)`,
+                    transform: `scale(${scale}) translateX(${xOffset}%)`
                 }}
+                scrolling="no"
                 src={src}
                 title={title}
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
