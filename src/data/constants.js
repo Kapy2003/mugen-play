@@ -89,3 +89,28 @@ export const VIDEO_SOURCES = {
     YOUTUBE: 'youtube', // Kept for legacy compatibility if needed
     EXTERNAL: 'external'
 };
+
+// Manually mapped overrides for known tricky titles
+// Key: AniList Title (English or Romaji)
+// Value: The correct slug on the target site (HiAnime)
+export const ANIME_SLUG_OVERRIDES = {
+    'Hunter x Hunter (2011)': 'hunter-x-hunter-2011',
+    // Validated Overrides
+    'Hunter x Hunter (TV)': 'hunter-x-hunter-2', // User suggested (redirects to ep 1)
+
+    'JUJUTSU KAISEN Season 2': 'jujutsu-kaisen-2nd-season',
+    'Jujutsu Kaisen Season 2': 'jujutsu-kaisen-2nd-season',
+    'JUJUTSU KAISEN 2nd Season': 'jujutsu-kaisen-2nd-season',
+
+    // Corrected JJK Season 1 (user had invalid slug)
+    'Jujutsu Kaisen': 'jujutsu-kaisen-tv',
+    'JUJUTSU KAISEN': 'jujutsu-kaisen-tv',
+
+    'One Piece': 'one-piece',
+    'ONE PIECE': 'one-piece',
+
+    'Jujutsu Kaisen 0': 'jujutsu-kaisen-0-movie',
+    'Jujutsu Kaisen 0 Movie': 'jujutsu-kaisen-0-movie',
+    'JUJUTSU KAISEN 0': 'jujutsu-kaisen-0-movie'
+
+};

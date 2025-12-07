@@ -7,7 +7,7 @@ import ExtensionsView from './components/extensions/ExtensionsView';
 import AddSourceModal from './components/extensions/AddSourceModal';
 import DirectPlayModal from './components/player/DirectPlayModal';
 import Toast from './components/common/Toast';
-import { INITIAL_EXTENSIONS } from './data/constants';
+import { ANIME_CATALOG, INITIAL_EXTENSIONS, VIDEO_SOURCES, ANIME_SLUG_OVERRIDES } from './data/constants';
 import { Search, Home, Play, Info, ChevronRight, X, Maximize2, Minimize2, PanelRight, Settings2, MoreVertical, Trash2, Filter, Compass, Shuffle, Star, Heart } from 'lucide-react';
 import { AnilistSource } from './extensions/AnilistSource';
 import { ANIME_KAI_IDS } from './data/anime_ids';
@@ -393,15 +393,26 @@ function App() {
                             const title = anime.title.english || anime.title.romaji || anime.title;
                             // Clean title for better search (remove " - Episode X" suffix if present)
                             const cleanTitle = title.split(' - Episode')[0];
-                            const results = await AnitakuScraper.search(cleanTitle);
 
-                            if (results && results.length > 0) {
-                                const match = results[0];
-                                slug = match.id;
-                                console.log("Anitaku Match Slug:", slug);
+                            // CHECK OVERRIDES FIRST
+                            // Use exact title matching for overrides
+                            if (ANIME_SLUG_OVERRIDES[cleanTitle] || ANIME_SLUG_OVERRIDES[anime.title.romaji]) {
+                                slug = ANIME_SLUG_OVERRIDES[cleanTitle] || ANIME_SLUG_OVERRIDES[anime.title.romaji];
+                                console.log("Using Manual Override Slug:", slug);
                             } else {
-                                throw new Error("Anime not found on Anitaku");
+                                // Default Search Logic
+                                const results = await AnitakuScraper.search(cleanTitle);
+
+                                if (results && results.length > 0) {
+                                    const match = results[0];
+                                    slug = match.id;
+                                    console.log("Anitaku Match Slug:", slug);
+                                } else {
+                                    throw new Error("Anime not found on Anitaku");
+                                }
                             }
+
+
                         } catch (err) {
                             console.error("Anitaku Search Error:", err);
                             showToast(`Could not find "${anime.title.english || anime.title}" on Anitaku.`, 'error');
@@ -1342,12 +1353,12 @@ function App() {
 
                             {/* Sidebar (Full Screen Only) */}
                             {!isPlayerMinimized && playingAnime.format !== 'MOVIE' && (
-                                <div className={`${isSidebarVisible ? 'w-80 lg:w-96 translate-x-0' : 'w-0 translate-x-full hidden'} bg-[#111] border-l border-white/5 flex flex-col transition-all duration-300 ease-in-out z-20`}>
-                                    <div className="p-4 border-b border-white/5 bg-[#111] z-10 sticky top-0 flex justify-between items-center whitespace-nowrap overflow-hidden">
+                                <div className={`${isSidebarVisible ? 'w-80 lg:w-96 translate-x-0' : 'w-0 translate-x-full hidden'} bg-[#111] border-l border-white/5 flex flex-col transition-all duration-300 ease-in-out z-20 overflow-hidden no-scrollbar`}>
+                                    <div className="p-4 border-b border-white/5 bg-[#111] z-10 flex justify-between items-center whitespace-nowrap overflow-hidden">
                                         <h3 className="font-bold text-gray-200">Episodes</h3>
                                         <span className="text-xs text-gray-500">{playingAnime.episodesList?.length || playingAnime.episodes || '?'} Total</span>
                                     </div>
-                                    <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-2">
+                                    <div className="flex-1 overflow-y-auto no-scrollbar p-2 space-y-2">
                                         {((playingAnime.episodesList?.length > 0 && playingAnime.episodesList) || Array.from({ length: playingAnime.episodes || 12 })).map((ep, idx) => {
                                             const epNum = ep?.number || idx + 1;
                                             const isCurrent = (playingAnime.url || '').includes(`ep-${epNum}`) || (playingAnime.url || '').includes(`episode-${epNum}`);

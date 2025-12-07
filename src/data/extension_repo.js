@@ -1,5 +1,12 @@
 export const ANIYOMI_SOURCES = [
     {
+        "name": "Hianime-Live",
+        "lang": "en",
+        "id": "hianime-custom-source",
+        "baseUrl": "https://hianimez.live/home",
+        "nsfw": false
+    },
+    {
         "name": "Anitaku",
         "lang": "en",
         "id": "anitaku-custom-source",
