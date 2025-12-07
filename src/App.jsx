@@ -22,7 +22,10 @@ function App() {
         const saved = localStorage.getItem('mugen_sidebar_width');
         return saved ? parseInt(saved, 10) : 256;
     });
-    const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+    const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
+        const saved = localStorage.getItem('mugen_sidebar_collapsed');
+        return saved ? saved === 'true' : false;
+    });
     const [videoScale, setVideoScale] = useState(1); // Zoom level for player
     const [videoXOffset, setVideoXOffset] = useState(0); // Horizontal shift (e.g. to crop left sidebar)
     const [videoYOffset, setVideoYOffset] = useState(-60); // Vertical shift (Top Crop in px)
@@ -180,6 +183,11 @@ function App() {
     useEffect(() => {
         localStorage.setItem('mugen_sidebar_width', sidebarWidth.toString());
     }, [sidebarWidth]);
+
+    // Persist sidebar collapsed state
+    useEffect(() => {
+        localStorage.setItem('mugen_sidebar_collapsed', isSidebarCollapsed.toString());
+    }, [isSidebarCollapsed]);
 
     // Load Content when Provider, Search, or Filters change
     useEffect(() => {
@@ -1180,7 +1188,7 @@ function App() {
                                             </div>
                                         )}
                                     </div>
-                                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-6">
+                                    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6">
                                         {animeList.map(anime => (
                                             <AnimeCard
                                                 key={anime.id}

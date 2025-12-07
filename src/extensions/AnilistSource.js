@@ -54,7 +54,7 @@ export class AnilistSource extends Extension {
     async getTrending(filters = {}) {
         const variables = {
             page: 1,
-            perPage: 10,
+            perPage: 30, // Increased to fill larger grids
             sort: 'TRENDING_DESC',
             ...filters
         };
@@ -120,6 +120,7 @@ export class AnilistSource extends Extension {
         // Construct variables
         const variables = {
             page: 1, // Default
+            perPage: 30,
             search: query || undefined,
             sort: filters.sort || 'POPULARITY_DESC',
             ...filters
@@ -139,8 +140,8 @@ export class AnilistSource extends Extension {
         // status: MediaStatus (FINISHED, RELEASING, NOT_YET_RELEASED, CANCELLED, HIATUS)
 
         const gqlQuery = `
-    query ($page: Int, $search: String, $genre: String, $year: Int, $season: MediaSeason, $format: MediaFormat, $status: MediaStatus ${variables.isAdult !== undefined ? ', $isAdult: Boolean' : ''}) {
-        Page(page: $page, perPage: 20) {
+    query ($page: Int, $perPage: Int, $search: String, $genre: String, $year: Int, $season: MediaSeason, $format: MediaFormat, $status: MediaStatus ${variables.isAdult !== undefined ? ', $isAdult: Boolean' : ''}) {
+        Page(page: $page, perPage: $perPage) {
             pageInfo {
                 total
                 perPage

@@ -123,11 +123,12 @@ const Sidebar = ({ activeTab, onTabChange, isMobileOpen, setIsMobileOpen, search
                                         }
                   `}
                                 >
-                                    <Icon className={`w-5 h-5 flex-shrink-0 ${isActive ? 'fill-current' : ''}`} />
+                                    <Icon className={`w-5 h-5 flex-shrink-0`} />
                                     {!collapsed && <span className="font-medium truncate">{item.label}</span>}
                                     {isActive && !collapsed && (
-                                        <div className="ml-auto w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                                        <div className="ml-auto w-1.5 h-1.5 rounded-full bg-white" />
                                     )}
+
                                 </button>
                             );
                         })}
