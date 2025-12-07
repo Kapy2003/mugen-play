@@ -21,8 +21,8 @@ const Sidebar = ({ activeTab, onTabChange, isMobileOpen, setIsMobileOpen, search
             const newWidth = startWidth + mouseMoveEvent.clientX - startX;
             if (newWidth > 60 && newWidth < 600) { // Min/Max constraints
                 setWidth(newWidth);
-                if (newWidth < 100 && !collapsed) setCollapsed(true);
-                if (newWidth > 100 && collapsed) setCollapsed(false);
+                if (newWidth < 160 && !collapsed) setCollapsed(true);
+                if (newWidth > 160 && collapsed) setCollapsed(false);
             }
         };
 
@@ -63,10 +63,10 @@ const Sidebar = ({ activeTab, onTabChange, isMobileOpen, setIsMobileOpen, search
                     {/* Toggle Collapse Button (Desktop Only) */}
                     <button
                         onClick={() => setCollapsed(!collapsed)}
-                        className="hidden lg:flex absolute top-4 right-2 p-1 text-gray-500 hover:text-white transition-colors"
+                        className={`hidden lg:flex absolute top-4 z-10 p-2 text-gray-500 hover:text-white hover:bg-white/10 rounded-lg transition-all ${collapsed ? 'left-1/2 -translate-x-1/2' : 'right-4'}`}
                         title={collapsed ? "Expand" : "Collapse"}
                     >
-                        {collapsed ? <Menu size={16} /> : <div className="w-1 h-4 bg-gray-700 rounded-full" />}
+                        <Menu size={24} />
                     </button>
 
                     {/* Logo */}
@@ -75,7 +75,7 @@ const Sidebar = ({ activeTab, onTabChange, isMobileOpen, setIsMobileOpen, search
                             e.preventDefault();
                             onTabChange('home');
                         }}
-                        className={`flex items-center gap-2 ${collapsed ? 'justify-center px-0' : 'px-4'} py-8 w-full text-left hover:opacity-80 transition-opacity`}
+                        className={`flex items-center gap-2 ${collapsed ? 'justify-center px-0 mt-14' : 'px-4'} py-8 w-full text-left hover:opacity-80 transition-opacity`}
                         type="button"
                     >
                         <div className="w-8 h-8 shrink-0 rounded-lg bg-gradient-to-br from-red-600 to-red-800 flex items-center justify-center">
@@ -124,7 +124,7 @@ const Sidebar = ({ activeTab, onTabChange, isMobileOpen, setIsMobileOpen, search
                   `}
                                 >
                                     <Icon className={`w-5 h-5 flex-shrink-0 ${isActive ? 'fill-current' : ''}`} />
-                                    {!collapsed && <span className="font-medium whitespace-nowrap overflow-hidden">{item.label}</span>}
+                                    {!collapsed && <span className="font-medium truncate">{item.label}</span>}
                                     {isActive && !collapsed && (
                                         <div className="ml-auto w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
                                     )}

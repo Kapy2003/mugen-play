@@ -68,7 +68,7 @@ const HorizontalScrollList = ({ title, icon: Icon, items, onItemClick, renderIte
 
             <div
                 ref={scrollRef}
-                className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide cursor-grab active:cursor-grabbing select-none"
+                className="flex gap-4 overflow-x-auto pb-24 -mb-20 scrollbar-hide cursor-grab active:cursor-grabbing select-none"
                 onMouseDown={handleMouseDown}
                 onMouseLeave={handleMouseLeave}
                 onMouseUp={handleMouseUp}

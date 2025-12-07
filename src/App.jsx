@@ -8,7 +8,7 @@ import AddSourceModal from './components/extensions/AddSourceModal';
 import DirectPlayModal from './components/player/DirectPlayModal';
 import Toast from './components/common/Toast';
 import { INITIAL_EXTENSIONS } from './data/constants';
-import { Search, Filter, Play, Maximize2, Minimize2, X, Compass, Shuffle, Star, PanelRight, Heart } from 'lucide-react';
+import { Search, Home, Play, Info, ChevronRight, X, Maximize2, Minimize2, PanelRight, Settings2, MoreVertical, Trash2, Filter, Compass, Shuffle, Star, Heart } from 'lucide-react';
 import { AnilistSource } from './extensions/AnilistSource';
 import { ANIME_KAI_IDS } from './data/anime_ids';
 import HorizontalScrollList from './components/common/HorizontalScrollList';
@@ -18,15 +18,16 @@ function App() {
     // --- State ---
     const [activeTab, setActiveTab] = useState('home');
     const [isMobileOpen, setIsMobileOpen] = useState(false);
+    const [sidebarWidth, setSidebarWidth] = useState(() => {
+        const saved = localStorage.getItem('mugen_sidebar_width');
+        return saved ? parseInt(saved, 10) : 256;
+    });
+    const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
     const [videoScale, setVideoScale] = useState(1); // Zoom level for player
     const [videoXOffset, setVideoXOffset] = useState(0); // Horizontal shift (e.g. to crop left sidebar)
     const [videoYOffset, setVideoYOffset] = useState(-60); // Vertical shift (Top Crop in px)
 
     const [isSidebarVisible, setIsSidebarVisible] = useState(true); // Toggle Episode Sidebar (Right)
-
-    // Left Sidebar State
-    const [sidebarWidth, setSidebarWidth] = useState(256);
-    const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
     // Provider State
     const [extensions, setExtensions] = useState(() => {
@@ -64,6 +65,7 @@ function App() {
     const [page, setPage] = useState(1);
     const [hasNextPage, setHasNextPage] = useState(true); // Simplified: assume next unless empty result
     const [totalPages, setTotalPages] = useState(1);
+    const [activeHistoryMenu, setActiveHistoryMenu] = useState(null); // ID of history item with open menu
 
     // UI State
     const [selectedAnime, setSelectedAnime] = useState(null);
@@ -174,6 +176,11 @@ function App() {
         localStorage.setItem('mugen_active_provider_id', activeProvider.id);
     }, [activeProvider]);
 
+    // Persist sidebar width
+    useEffect(() => {
+        localStorage.setItem('mugen_sidebar_width', sidebarWidth.toString());
+    }, [sidebarWidth]);
+
     // Load Content when Provider, Search, or Filters change
     useEffect(() => {
         const loadContent = async () => {
@@ -257,13 +264,20 @@ function App() {
 
     const addToHistory = (anime) => {
         setWatchHistory(prev => {
-            // Remove existing entry for this anime if present (to bump to top)
-            const filtered = prev.filter(item => item.id !== anime.id);
-            // Add to front, cap at 10
-            const newHistory = [anime, ...filtered].slice(0, 10);
+            const newHistory = [anime, ...prev.filter(i => i.id !== anime.id)].slice(0, 50);
             localStorage.setItem('mugen_watch_history', JSON.stringify(newHistory));
             return newHistory;
         });
+    };
+
+    const removeFromHistory = (animeId) => {
+        setWatchHistory(prev => {
+            const newHistory = prev.filter(i => i.id !== animeId);
+            localStorage.setItem('mugen_watch_history', JSON.stringify(newHistory));
+            return newHistory;
+        });
+        setActiveHistoryMenu(null); // Close menu
+        setToast({ message: "Removed from history", type: 'success' });
     };
 
     const toggleFavorite = (anime) => {
@@ -588,10 +602,10 @@ function App() {
                     <div className="h-14 flex items-center justify-between px-4 bg-black/60 backdrop-blur-md border-b border-white/5 z-20">
                         <div className="flex items-center gap-4">
                             <button
-                                onClick={() => setPlayingAnime(null)}
-                                className="p-2 hover:bg-white/10 rounded-full transition-colors"
+                                onClick={() => setIsPlayerMinimized(true)}
+                                className="p-2 hover:bg-white/10 rounded-full transition-colors text-gray-400 hover:text-white"
                             >
-                                <X size={20} />
+                                <Minimize2 size={20} />
                             </button>
                             <h2 className="font-semibold text-sm sm:text-base truncate max-w-md cursor-default">
                                 {playingAnime.title}
@@ -601,11 +615,11 @@ function App() {
                         {/* Window Controls (Zoom/Pan removed as requested) */}
                         <div className="flex items-center gap-3">
                             <button
-                                onClick={() => setIsPlayerMinimized(true)}
-                                className="p-2 hover:bg-white/10 rounded-full transition-colors text-gray-400 hover:text-white"
-                                title="Minimize"
+                                onClick={() => setPlayingAnime(null)}
+                                className="p-2 hover:bg-white/10 rounded-full transition-colors text-white hover:text-red-500"
+                                title="Close Player"
                             >
-                                <Minimize2 size={20} />
+                                <X size={20} />
                             </button>
 
                             <div className="w-px h-6 bg-white/10 mx-1"></div>
@@ -1088,7 +1102,10 @@ function App() {
                                     onItemClick={(anime) => setSelectedAnime(anime)}
                                     renderItem={(anime) => (
                                         <div className="min-w-[200px] w-[200px] flex-shrink-0 cursor-pointer group relative">
-                                            <div className="aspect-[2/3] rounded-xl overflow-hidden mb-2 relative">
+                                            <div
+                                                className="aspect-[2/3] rounded-xl overflow-hidden mb-2 relative"
+                                                onClick={() => setSelectedAnime(anime)}
+                                            >
                                                 <img
                                                     src={anime.coverUrl || anime.image}
                                                     alt={anime.title}
@@ -1101,8 +1118,47 @@ function App() {
                                                     <div className="h-full bg-red-600 w-1/2"></div>
                                                 </div>
                                             </div>
-                                            <h3 className="text-sm font-medium text-white truncate">{anime.title.romaji || anime.title}</h3>
-                                            <p className="text-xs text-gray-500">{anime.episodes ? `${anime.episodes} Episodes` : 'TV Series'}</p>
+                                            <div className="flex justify-between items-start">
+                                                <div className="flex-1 min-w-0 pr-2">
+                                                    <h3 className="text-sm font-medium text-white truncate">{anime.title.romaji || anime.title}</h3>
+                                                    <p className="text-xs text-gray-500">{anime.episodes ? `${anime.episodes} Episodes` : 'TV Series'}</p>
+                                                </div>
+                                                <div className="relative">
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setActiveHistoryMenu(activeHistoryMenu === anime.id ? null : anime.id);
+                                                        }}
+                                                        className="p-1 hover:bg-gray-800 rounded-full text-gray-400 hover:text-white transition-colors"
+                                                    >
+                                                        <MoreVertical className="w-4 h-4" />
+                                                    </button>
+
+                                                    {activeHistoryMenu === anime.id && (
+                                                        <>
+                                                            <div
+                                                                className="fixed inset-0 z-10 cursor-default"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setActiveHistoryMenu(null);
+                                                                }}
+                                                            />
+                                                            <div className="absolute right-0 top-full mt-1 bg-gray-900 border border-gray-800 rounded-lg shadow-xl z-20 py-1 min-w-[140px]">
+                                                                <button
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        removeFromHistory(anime.id);
+                                                                    }}
+                                                                    className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-gray-800 flex items-center gap-2"
+                                                                >
+                                                                    <Trash2 className="w-4 h-4" />
+                                                                    Remove
+                                                                </button>
+                                                            </div>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </div>
                                         </div>
                                     )}
                                 />
