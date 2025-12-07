@@ -45,6 +45,8 @@ export class AnilistSource extends Extension {
             genres: media.genres,
             year: media.seasonYear,
             format: media.format, // Add Format
+            status: media.status, // Add Status
+            nextAiringEpisode: media.nextAiringEpisode, // Add Next Airing Info
             type: 'custom',
             // source: media.siteUrl, // REMOVED: Do not use AniList site as video source (it blocks embeds)
             trailer: media.trailer // Store trailer info
@@ -91,6 +93,11 @@ export class AnilistSource extends Extension {
                 genres
                 seasonYear
                 format
+                status
+                nextAiringEpisode {
+                    episode
+                    timeUntilAiring
+                }
                 siteUrl
                 trailer {
                     id
@@ -175,6 +182,12 @@ export class AnilistSource extends Extension {
                 episodes
                 genres
                 seasonYear
+                format
+                status
+                nextAiringEpisode {
+                    episode
+                    timeUntilAiring
+                }
                 siteUrl
                 trailer {
                     id

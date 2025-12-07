@@ -1351,15 +1351,37 @@ function App() {
                                         {((playingAnime.episodesList?.length > 0 && playingAnime.episodesList) || Array.from({ length: playingAnime.episodes || 12 })).map((ep, idx) => {
                                             const epNum = ep?.number || idx + 1;
                                             const isCurrent = (playingAnime.url || '').includes(`ep-${epNum}`) || (playingAnime.url || '').includes(`episode-${epNum}`);
+
+                                            // Check if episode is released
+                                            const isReleased = !playingAnime.nextAiringEpisode || epNum < playingAnime.nextAiringEpisode.episode;
+
                                             return (
-                                                <button key={epNum} onClick={() => handlePlay(playingAnime, epNum)} className={`w-full flex items-center gap-3 p-3 rounded-lg transition-all group ${isCurrent ? 'bg-red-600 text-white' : 'hover:bg-white/5 text-gray-400'}`}>
+                                                <button
+                                                    key={epNum}
+                                                    onClick={() => isReleased && handlePlay(playingAnime, epNum)}
+                                                    disabled={!isReleased}
+                                                    className={`w-full flex items-center gap-3 p-3 rounded-lg transition-all group relative overflow-hidden ${isCurrent ? 'bg-red-600 text-white' : (isReleased ? 'hover:bg-white/5 text-gray-400' : 'opacity-40 cursor-not-allowed text-gray-600')}`}
+                                                >
                                                     <div className="relative shrink-0 w-24 h-16 bg-black/40 rounded overflow-hidden border border-white/5">
-                                                        <img src={playingAnime.bannerUrl} className={`w-full h-full object-cover transition-opacity ${isCurrent ? 'opacity-100' : 'opacity-60 group-hover:opacity-100'}`} alt="" />
-                                                        <div className="absolute inset-0 flex items-center justify-center bg-black/40"><Play size={16} fill="currentColor" className={isCurrent ? 'text-white' : 'text-white/50'} /></div>
+                                                        <img src={playingAnime.bannerUrl} className={`w-full h-full object-cover transition-opacity ${isCurrent ? 'opacity-100' : (isReleased ? 'opacity-60 group-hover:opacity-100' : 'opacity-30 grayscale')}`} alt="" />
+                                                        <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                                                            {isReleased ? (
+                                                                <Play size={16} fill="currentColor" className={isCurrent ? 'text-white' : 'text-white/50'} />
+                                                            ) : (
+                                                                <div className="flex flex-col items-center">
+                                                                    {/* Using Clock icon if available, otherwise just text/lock */}
+                                                                    <span className="text-xs font-bold text-white/70 uppercase">Not Aired</span>
+                                                                </div>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                     <div className="text-left flex-1 min-w-0">
                                                         <div className="font-medium truncate text-sm">Episode {epNum}</div>
-                                                        <div className="text-xs opacity-60 truncate">{ep?.title || (playingAnime.title ? playingAnime.title.split(' - Episode')[0] : '')}</div>
+                                                        <div className="text-xs opacity-60 truncate">
+                                                            {!isReleased && playingAnime.nextAiringEpisode && epNum === playingAnime.nextAiringEpisode.episode
+                                                                ? `Airing in ${Math.round(playingAnime.nextAiringEpisode.timeUntilAiring / 86400)} days`
+                                                                : (ep?.title || (playingAnime.title ? playingAnime.title.split(' - Episode')[0] : ''))}
+                                                        </div>
                                                     </div>
                                                 </button>
                                             );
