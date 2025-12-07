@@ -50,11 +50,32 @@ export class AnilistSource extends Extension {
         };
     }
 
-    async getTrending() {
+    async getTrending(filters = {}) {
+        const variables = {
+            page: 1,
+            perPage: 10,
+            sort: 'TRENDING_DESC',
+            ...filters
+        };
+
+        console.log("getTrending variables:", JSON.stringify(variables));
+
+        // Remove internal
+
+        // Remove internal
+        delete variables._t;
+
         const query = `
-    query {
-        Page(page: 1, perPage: 10) {
-            media(sort: TRENDING_DESC, type: ANIME) {
+    query ($page: Int, $perPage: Int, $sort: [MediaSort]${variables.isAdult !== undefined ? ', $isAdult: Boolean' : ''}) {
+        Page(page: $page, perPage: $perPage) {
+            pageInfo {
+                total
+                perPage
+                currentPage
+                lastPage
+                hasNextPage
+            }
+            media(sort: $sort, type: ANIME ${variables.isAdult !== undefined ? ', isAdult: $isAdult' : ''}) {
                 id
                 title {
                     romaji
@@ -81,11 +102,14 @@ export class AnilistSource extends Extension {
     `;
 
         try {
-            const data = await this.runQuery(query);
-            return data.Page.media.map(m => this.mapAnime(m));
+            const data = await this.runQuery(query, variables);
+            return {
+                results: data.Page.media.map(m => this.mapAnime(m)),
+                meta: data.Page.pageInfo
+            };
         } catch (error) {
             console.error("AniList Trending Error", error);
-            return [];
+            return { results: [], meta: { hasNextPage: false, lastPage: 1 } };
         }
     }
 
@@ -95,10 +119,16 @@ export class AnilistSource extends Extension {
 
         // Construct variables
         const variables = {
+            page: 1, // Default
             search: query || undefined,
-            sort: 'POPULARITY_DESC',
+            sort: filters.sort || 'POPULARITY_DESC',
             ...filters
         };
+
+        console.log("search variables:", JSON.stringify(variables));
+
+        // Remove internal refresh token
+        delete variables._t;
 
         // Dynamic Query Construction based on filters
         // AniList API types:
@@ -109,8 +139,15 @@ export class AnilistSource extends Extension {
         // status: MediaStatus (FINISHED, RELEASING, NOT_YET_RELEASED, CANCELLED, HIATUS)
 
         const gqlQuery = `
-    query ($search: String, $genre: String, $year: Int, $season: MediaSeason, $format: MediaFormat, $status: MediaStatus, $isAdult: Boolean) {
-        Page(page: 1, perPage: 20) {
+    query ($page: Int, $search: String, $genre: String, $year: Int, $season: MediaSeason, $format: MediaFormat, $status: MediaStatus ${variables.isAdult !== undefined ? ', $isAdult: Boolean' : ''}) {
+        Page(page: $page, perPage: 20) {
+            pageInfo {
+                total
+                perPage
+                currentPage
+                lastPage
+                hasNextPage
+            }
             media(
                 search: $search, 
                 genre: $genre,
@@ -118,7 +155,7 @@ export class AnilistSource extends Extension {
                 season: $season,
                 format: $format,
                 status: $status,
-                isAdult: $isAdult,
+                ${variables.isAdult !== undefined ? 'isAdult: $isAdult,' : ''}
                 sort: POPULARITY_DESC, 
                 type: ANIME
             ) {
@@ -149,10 +186,13 @@ export class AnilistSource extends Extension {
 
         try {
             const data = await this.runQuery(gqlQuery, variables);
-            return data.Page.media.map(m => this.mapAnime(m));
+            return {
+                results: data.Page.media.map(m => this.mapAnime(m)),
+                meta: data.Page.pageInfo
+            };
         } catch (error) {
             // console.error("AniList Search Error", error); // Suppress log for cleaner console, or handle better
-            return [];
+            return { results: [], meta: { hasNextPage: false, lastPage: 1 } };
         }
     }
 

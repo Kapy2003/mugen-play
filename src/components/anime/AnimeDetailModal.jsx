@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { X, Play, Plus, Share2, Star, Calendar } from 'lucide-react';
+import { X, Play, Plus, Share2, Star, Calendar, Heart } from 'lucide-react';
 
-const AnimeDetailModal = ({ anime, onClose, onPlay }) => {
+const AnimeDetailModal = ({ anime, onClose, onPlay, isFavorite, onToggleFavorite }) => {
     const [showTrailer, setShowTrailer] = useState(false);
 
     useEffect(() => {
@@ -123,9 +123,12 @@ const AnimeDetailModal = ({ anime, onClose, onPlay }) => {
                                     <Play className="w-5 h-5 fill-current" />
                                     Watch Now
                                 </button>
-                                <button className="flex items-center gap-2 px-4 py-3 rounded-xl bg-gray-800 hover:bg-gray-700 text-white font-medium transition-colors border border-gray-700">
-                                    <Plus className="w-5 h-5" />
-                                    Add to List
+                                <button
+                                    onClick={() => onToggleFavorite(anime)}
+                                    className={`flex items-center gap-2 px-4 py-3 rounded-xl font-medium transition-colors border ${isFavorite ? 'bg-red-600 border-red-600 text-white hover:bg-red-700' : 'bg-gray-800 hover:bg-gray-700 text-white border-gray-700'}`}
+                                >
+                                    <Heart className={`w-5 h-5 ${isFavorite ? 'fill-current' : ''}`} />
+                                    {isFavorite ? 'Favorited' : 'Add to Favorites'}
                                 </button>
                                 <button className="flex items-center gap-2 px-4 py-3 rounded-xl bg-gray-800 hover:bg-gray-700 text-white font-medium transition-colors border border-gray-700">
                                     <Share2 className="w-5 h-5" />

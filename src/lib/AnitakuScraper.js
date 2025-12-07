@@ -6,19 +6,21 @@
 const BASE_URL = "https://hianimez.live/watch";
 const AJAX_URL = "https://ajax.gogocdn.net/ajax/load-list-episode";
 
-// Keys for GogoCDN (AES-256-CBC)
-// Converted from Go strings to Uint8Array
-const ENCODER = new TextEncoder();
-const KEYS = {
-    key: ENCODER.encode("37911490979715163134003223491201"),
-    secondKey: ENCODER.encode("54674138327930866480207815084989"),
-    iv: ENCODER.encode("3134003223491201")
+// Keys for GogoCDN (AES-256-CBC) - Keeping CDN name in keys is fine as it refers to the tech
+const keys = {
+    key: "37911490979715163134003223491201",
+    secondKey: "54674138327930866480207815084989",
+    iv: "3134003223491201"
 };
 
-export const GogoScraper = {
+/**
+ * Anitaku (formerly GogoAnime) Scraper
+ * Handles searching, episode fetching, and server extraction
+ */
+export const AnitakuScraper = {
     /**
      * Search for anime
-     * @param {string} query 
+     * Custom implementation: Directly navigates to HiAnime (anitaku mirror) search results
      */
     async search(query) {
         try {
@@ -30,7 +32,7 @@ export const GogoScraper = {
                 .replace(/\s+/g, '-');
 
             const directUrl = `${BASE_URL}/${slug}`;
-            console.log(`[GogoScraper] Generating Direct URL (No Fetch): ${directUrl}`);
+            console.log(`[AnitakuScraper] Generating Direct URL (No Fetch): ${directUrl}`);
 
             // SKIP FETCH (CORS workaround)
             // We return the slugified result directly.
@@ -44,7 +46,7 @@ export const GogoScraper = {
             }];
 
         } catch (error) {
-            console.error("[GogoScraper] Direct Search Error:", error);
+            console.error("[AnitakuScraper] Direct Search Error:", error);
             return [];
         }
     },
@@ -59,7 +61,7 @@ export const GogoScraper = {
                 url = `${BASE_URL}/category/${id}`;
             }
 
-            console.log(`[GogoScraper] Fetching page: ${url}`);
+            console.log(`[AnitakuScraper] Fetching page: ${url}`);
             const response = await fetch(url);
             if (!response.ok) throw new Error(`Failed to fetch page: ${response.status}`);
             const html = await response.text();
@@ -70,7 +72,7 @@ export const GogoScraper = {
             // Strategy 1: Check if episodes are already in the DOM (Common in Anitaku)
             const directFromDom = this._parseEpisodeList(doc);
             if (directFromDom.length > 0) {
-                console.log(`[GogoScraper] Found ${directFromDom.length} episodes directly in DOM.`);
+                console.log(`[AnitakuScraper] Found ${directFromDom.length} episodes directly in DOM.`);
                 return directFromDom;
             }
 
@@ -118,7 +120,7 @@ export const GogoScraper = {
             return episodes;
 
         } catch (error) {
-            console.error("[GogoScraper] Error getting episodes:", error);
+            console.error("[AnitakuScraper] Error getting episodes:", error);
             throw error;
         }
     },
@@ -163,7 +165,7 @@ export const GogoScraper = {
             const urlObj = new URL(embedUrl);
             const id = urlObj.searchParams.get('id'); // Encrypted ID
 
-            console.log(`[GogoScraper] Extracting from: ${embedUrl}`);
+            console.log(`[AnitakuScraper] Extracting from: ${embedUrl}`);
             const response = await fetch(embedUrl);
             const html = await response.text();
 
@@ -202,7 +204,7 @@ export const GogoScraper = {
             return sources;
 
         } catch (error) {
-            console.error("[GogoScraper] Error extracting video:", error);
+            console.error("[AnitakuScraper] Error extracting video:", error);
             throw error;
         }
     }

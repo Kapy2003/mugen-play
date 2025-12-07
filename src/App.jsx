@@ -8,11 +8,11 @@ import AddSourceModal from './components/extensions/AddSourceModal';
 import DirectPlayModal from './components/player/DirectPlayModal';
 import Toast from './components/common/Toast';
 import { INITIAL_EXTENSIONS } from './data/constants';
-import { Search, Filter, Play, Maximize2, Minimize2, X, Compass, Shuffle, Star, PanelRight } from 'lucide-react';
+import { Search, Filter, Play, Maximize2, Minimize2, X, Compass, Shuffle, Star, PanelRight, Heart } from 'lucide-react';
 import { AnilistSource } from './extensions/AnilistSource';
 import { ANIME_KAI_IDS } from './data/anime_ids';
 import HorizontalScrollList from './components/common/HorizontalScrollList';
-import { GogoScraper } from './lib/GogoScraper';
+import { AnitakuScraper } from './lib/AnitakuScraper';
 
 function App() {
     // --- State ---
@@ -21,36 +21,33 @@ function App() {
     const [videoScale, setVideoScale] = useState(1); // Zoom level for player
     const [videoXOffset, setVideoXOffset] = useState(0); // Horizontal shift (e.g. to crop left sidebar)
     const [videoYOffset, setVideoYOffset] = useState(-60); // Vertical shift (Top Crop in px)
-    const [isSidebarVisible, setIsSidebarVisible] = useState(true); // Toggle Episode Sidebar
+
+    const [isSidebarVisible, setIsSidebarVisible] = useState(true); // Toggle Episode Sidebar (Right)
+
+    // Left Sidebar State
+    const [sidebarWidth, setSidebarWidth] = useState(256);
+    const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
     // Provider State
     const [extensions, setExtensions] = useState(() => {
         const saved = localStorage.getItem('mugen_extensions');
-        let parsed = saved ? JSON.parse(saved) : []; // Default to empty array if parse fails
+        let parsed = saved ? JSON.parse(saved) : [];
 
-        // Ensure parsed is an array
         if (!Array.isArray(parsed)) parsed = [];
 
-        // Merge missing initial extensions (e.g. built-in sources)
-        // We want to force-add built-ins if they are missing by ID
+        // Check INITIAL_EXTENSIONS but DO NOT auto-install Anitaku (id: anitaku)
+        // Only auto-install critical sources if absolutely needed, or user preference.
+        // For new strategy: We wait for user.
+        // However, we must ensure at least ONE metadata source (Anilist) is present.
+
         const existingIds = new Set(parsed.map(e => e.id));
         INITIAL_EXTENSIONS.forEach(initExt => {
-            if (!existingIds.has(initExt.id)) {
+            // Force add Anilist if missing
+            if (initExt.id === 'anilist_source' && !existingIds.has(initExt.id)) {
                 parsed.push(initExt);
             }
+            // For other extensions (Anitaku), we skip auto-adding if not present.
         });
-
-        // Filter out deprecated sources (e.g. Mugen Local if removed)
-        parsed = parsed.filter(e => e.id !== 'local_source' && e.id !== 'local' && e.id !== 'animekai' && e.id !== 'hianime');
-
-        // Safety: If only 1 'source' (DB) extension exists, force it to be enabled.
-        // This ensures we always have a metadata provider.
-        const sources = parsed.filter(e => e.type === 'source');
-        if (sources.length === 1) {
-            const onlySource = sources[0];
-            // Find it in the main array and enable it
-            parsed = parsed.map(e => e.id === onlySource.id ? { ...e, enabled: true } : e);
-        }
 
         return parsed;
     });
@@ -60,10 +57,13 @@ function App() {
 
     // Content State
     const [animeList, setAnimeList] = useState([]);
-    const [trendingList, setTrendingList] = useState([]); // New state for Trending section
-    const [featuredAnime, setFeaturedAnime] = useState(null);
+    const [trendingList, setTrendingList] = useState([]);
+    const [featuredIndex, setFeaturedIndex] = useState(0); // Index for rotating banner
     const [isLoading, setIsLoading] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
+    const [page, setPage] = useState(1);
+    const [hasNextPage, setHasNextPage] = useState(true); // Simplified: assume next unless empty result
+    const [totalPages, setTotalPages] = useState(1);
 
     // UI State
     const [selectedAnime, setSelectedAnime] = useState(null);
@@ -81,9 +81,15 @@ function App() {
         return saved ? JSON.parse(saved) : [];
     });
 
+    // Favorites State
+    const [favorites, setFavorites] = useState(() => {
+        const saved = localStorage.getItem('mugen_favorites');
+        return saved ? JSON.parse(saved) : [];
+    });
+
     // Settings State
-    const [hideAdultContent, setHideAdultContent] = useState(() => {
-        return localStorage.getItem('mugen_hide_adult_content') === 'true';
+    const [contentFilter, setContentFilter] = useState(() => {
+        return localStorage.getItem('mugen_content_filter') || 'ALL'; // SAFE, NSFW, ALL
     });
 
     // Auth State
@@ -175,28 +181,53 @@ function App() {
             try {
                 if (searchQuery || Object.keys(filters).length > 0) {
                     // Check if provider supports filters, otherwise just search
+                    // Check if provider supports filters, otherwise just search
                     const effectiveFilters = { ...filters };
-                    if (hideAdultContent) {
+
+                    // Apply Content Filter
+                    if (contentFilter === 'SAFE') {
                         effectiveFilters.isAdult = false;
+                    } else if (contentFilter === 'NSFW') {
+                        effectiveFilters.isAdult = true;
+                    } else {
+                        // ALL: AniList default behavior usually excludes isAdult if not specified? 
+                        // Actually if we want BOTH, we might need to NOT send isAdult.
+                        delete effectiveFilters.isAdult;
                     }
 
-                    const results = await activeProvider.search(searchQuery, effectiveFilters);
-                    setAnimeList(results);
-                    setFeaturedAnime(null);
+                    effectiveFilters.page = page; // Use current page
+
+                    const data = await activeProvider.search(searchQuery, effectiveFilters);
+                    setAnimeList(data.results);
+                    setHasNextPage(data.meta.hasNextPage);
+                    setTotalPages(data.meta.lastPage || 1);
+                    // Removed legacy state: setFeaturedAnime(null);
                 } else {
                     // Default / Home View
-                    const trending = await activeProvider.getTrending();
-                    const catalog = await activeProvider.search('');
-
-                    setAnimeList(catalog);
-                    setTrendingList(trending); // Save trending list for display
-
-                    // Pick a random trending or catalog item as featured
-                    if (trending.length > 0) {
-                        setFeaturedAnime(trending[0]);
-                    } else if (catalog.length > 0) {
-                        setFeaturedAnime(catalog[Math.floor(Math.random() * catalog.length)]);
+                    // Apply Content Filter to Home (Trending & Popular)
+                    const homeFilters = {};
+                    if (contentFilter === 'SAFE') {
+                        homeFilters.isAdult = false;
+                    } else if (contentFilter === 'NSFW') {
+                        homeFilters.isAdult = true;
+                        // Use POPULARITY for NSFW banner as Trending often yields no adult results
+                        homeFilters.sort = 'POPULARITY_DESC';
                     }
+                    // ALL: leave isAdult undefined to get mixed content
+
+                    // Banner: Always Page 1
+                    const trendingData = await activeProvider.getTrending({ ...homeFilters, page: 1 });
+
+                    // Grid: Current Page
+                    homeFilters.page = page;
+                    const catalogData = await activeProvider.search('', homeFilters);
+
+                    setAnimeList(catalogData.results);
+                    setHasNextPage(catalogData.meta.hasNextPage);
+                    setTotalPages(catalogData.meta.lastPage || 1);
+
+                    setTrendingList(trendingData.results);
+                    setFeaturedIndex(0); // Reset banner to start when content changes
                 }
             } catch (err) {
                 console.error("Error loading content:", err);
@@ -208,7 +239,17 @@ function App() {
 
         const timeoutId = setTimeout(loadContent, 500); // Debounce search
         return () => clearTimeout(timeoutId);
-    }, [activeProvider, searchQuery, filters, hideAdultContent]); // Removed extensions dependency to prevent loop
+    }, [activeProvider, searchQuery, filters, contentFilter, page]);
+
+    // Banner Config: Auto-rotate every 4 seconds
+    useEffect(() => {
+        if (activeTab === 'home' && trendingList.length > 0 && !searchQuery) {
+            const interval = setInterval(() => {
+                setFeaturedIndex(prev => (prev + 1) % trendingList.length);
+            }, 4000);
+            return () => clearInterval(interval);
+        }
+    }, [activeTab, trendingList, searchQuery]);
     // --- Handlers ---
     const showToast = (message, type = 'info') => {
         setToast({ message, type });
@@ -225,6 +266,22 @@ function App() {
         });
     };
 
+    const toggleFavorite = (anime) => {
+        setFavorites(prev => {
+            const exists = prev.find(item => item.id === anime.id);
+            let newFavorites;
+            if (exists) {
+                newFavorites = prev.filter(item => item.id !== anime.id);
+                showToast("Removed from Favorites", "info");
+            } else {
+                newFavorites = [anime, ...prev];
+                showToast("Added to Favorites", "success");
+            }
+            localStorage.setItem('mugen_favorites', JSON.stringify(newFavorites));
+            return newFavorites;
+        });
+    };
+
     // Helper to save extensions to localStorage
     const saveExtensions = (updatedExtensions) => {
         localStorage.setItem('mugen_extensions', JSON.stringify(updatedExtensions));
@@ -232,11 +289,13 @@ function App() {
     };
 
     // Toggle Adult Content Filter
-    const toggleAdultFilter = () => {
-        const newValue = !hideAdultContent;
-        setHideAdultContent(newValue);
-        localStorage.setItem('mugen_hide_adult_content', newValue.toString());
-        showToast(`Adult Content ${newValue ? 'Hidden' : 'Visible'}`, 'success');
+    const cycleContentFilter = (val) => {
+        setContentFilter(val);
+        localStorage.setItem('mugen_content_filter', val);
+        showToast(`Content Filter: ${val}`, 'success');
+
+        // Reset page on content filter change
+        setPage(1);
     };
 
     // Helper to sanitize text (Simplified or removed if no longer strictly needed for obscenity, 
@@ -312,7 +371,7 @@ function App() {
                             const title = anime.title.english || anime.title.romaji || anime.title;
                             // Clean title for better search (remove " - Episode X" suffix if present)
                             const cleanTitle = title.split(' - Episode')[0];
-                            const results = await GogoScraper.search(cleanTitle);
+                            const results = await AnitakuScraper.search(cleanTitle);
 
                             if (results && results.length > 0) {
                                 const match = results[0];
@@ -332,7 +391,7 @@ function App() {
                         // Fetch Episode List for Sidebar if needed
                         if (!anime.episodesList || anime.episodesList.length === 0) {
                             try {
-                                foundEpisodes = await GogoScraper.getEpisodes(slug);
+                                foundEpisodes = await AnitakuScraper.getEpisodes(slug);
                                 episodesList = foundEpisodes;
                             } catch (e) {
                                 // ensure we keep existing list if fetch fails but we have one
@@ -406,6 +465,7 @@ function App() {
         if (tab === 'home') {
             setSearchQuery('');
             setFilters({});
+            setPage(1); // Reset page on tab change
         }
         if (playingAnime) {
             setIsPlayerMinimized(true);
@@ -497,20 +557,23 @@ function App() {
     // Sort extensions alphabetically
     const sortedExtensions = [...extensions].sort((a, b) => a.name.localeCompare(b.name));
 
-
-
-
+    const handleSearch = (e) => {
+        setSearchQuery(e.target.value);
+        setPage(1); // Reset to page 1 on search
+    };
 
     const handleFilterChange = (key, value) => {
-        const newFilters = { ...filters };
-        if (value === '') {
-            delete newFilters[key];
-        } else {
-            newFilters[key] = value;
-            if (key === 'year') newFilters[key] = parseInt(value); // Parse year
-        }
-        setFilters(newFilters);
-        setActiveTab('browse'); // Auto-switch to Browse
+        setFilters(prev => {
+            const newFilters = { ...prev };
+            if (value === '' || value === 'Any') { // 'Any' for select dropdowns
+                delete newFilters[key];
+            } else {
+                newFilters[key] = key === 'year' ? parseInt(value) : value;
+            }
+            return newFilters;
+        });
+        setPage(1); // Reset to page 1 on filter change
+        setActiveTab('browse'); // Auto-switch to Browse if filtering from home
     };
 
     // --- Render ---
@@ -695,10 +758,51 @@ function App() {
                             </div>
 
                             {/* Advanced Filter Bar */}
+                            <div className="flex flex-col sm:flex-row gap-4 mb-6 animate-fade-in-up">
+                                <div className="relative flex-1">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                                    <input
+                                        type="text"
+                                        placeholder={`Search inside ${activeProvider.name}...`}
+                                        value={searchQuery}
+                                        onChange={handleSearch}
+                                        className="w-full pl-10 pr-4 py-3 bg-gray-800 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-red-600 transition-all border border-gray-700 hover:border-gray-600"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Advanced Filters Section */}
                             {showSourceMenu && (
                                 <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 animate-fade-in">
 
+                                    {/* Content Rating */}
+                                    <div className="space-y-1">
+                                        <label className="text-xs font-bold text-gray-500 uppercase">Content</label>
+                                        <select
+                                            value={contentFilter}
+                                            onChange={(e) => cycleContentFilter(e.target.value)}
+                                            className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-500"
+                                        >
+                                            <option value="ALL">All</option>
+                                            <option value="SAFE">Safe</option>
+                                            <option value="NSFW">NSFW</option>
+                                        </select>
+                                    </div>
 
+                                    {/* Sort */}
+                                    <div className="space-y-1">
+                                        <label className="text-xs font-bold text-gray-500 uppercase">Sort</label>
+                                        <select
+                                            value={filters.sort || 'POPULARITY_DESC'}
+                                            onChange={(e) => handleFilterChange('sort', e.target.value)}
+                                            className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-500"
+                                        >
+                                            <option value="POPULARITY_DESC">Most Popular</option>
+                                            <option value="TRENDING_DESC">Trending</option>
+                                            <option value="SCORE_DESC">Highest Rated</option>
+                                            <option value="START_DATE_DESC">Newest</option>
+                                        </select>
+                                    </div>
                                     {/* Genres */}
                                     <div className="space-y-1">
                                         <label className="text-xs font-bold text-gray-500 uppercase">Genres</label>
@@ -794,6 +898,33 @@ function App() {
                             ))}
                         </div>
 
+                        {/* Pagination Controls */}
+                        {animeList.length > 0 && (
+                            <div className="flex justify-center items-center gap-4 mt-8 pb-8">
+                                <button
+                                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                                    disabled={page === 1}
+                                    className={`px-4 py-2 rounded-lg border font-medium transition-colors ${page === 1
+                                        ? 'border-gray-800 text-gray-600 cursor-not-allowed'
+                                        : 'border-gray-700 text-gray-300 hover:text-white hover:border-gray-500'
+                                        }`}
+                                >
+                                    Previous
+                                </button>
+                                <span className="text-gray-400 font-medium">Page {page} of {totalPages || '?'}</span>
+                                <button
+                                    onClick={() => setPage(p => p + 1)}
+                                    disabled={!hasNextPage}
+                                    className={`px-4 py-2 rounded-lg border font-medium transition-colors ${!hasNextPage
+                                        ? 'border-gray-800 text-gray-600 cursor-not-allowed'
+                                        : 'border-gray-700 text-gray-300 hover:text-white hover:border-gray-500'
+                                        }`}
+                                >
+                                    Next
+                                </button>
+                            </div>
+                        )}
+
                         {animeList.length === 0 && (
                             <div className="text-center py-20 text-gray-500">
                                 <Search className="w-12 h-12 mx-auto mb-4 opacity-20" />
@@ -805,14 +936,33 @@ function App() {
 
             case 'favorites':
                 return (
-                    <div className="p-4 sm:p-8 animate-fade-in flex flex-col items-center justify-center h-full text-center py-20">
-                        <div className="w-16 h-16 bg-gray-800 rounded-full flex items-center justify-center mb-4">
-                            <Play className="w-8 h-8 text-red-500" />
-                        </div>
-                        <h2 className="text-2xl font-bold text-white mb-2">Favorites</h2>
-                        <p className="text-gray-400 max-w-sm">
-                            Save your favorite anime here to access them quickly. Feature coming soon.
-                        </p>
+                    <div className="p-4 sm:p-8 animate-fade-in">
+                        <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-2">
+                            <Heart className="w-6 h-6 text-red-600 fill-current" />
+                            Favorites
+                        </h2>
+
+                        {favorites.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center h-64 text-center">
+                                <div className="w-16 h-16 bg-gray-800 rounded-full flex items-center justify-center mb-4">
+                                    <Heart className="w-8 h-8 text-gray-600" />
+                                </div>
+                                <h3 className="text-xl font-bold text-white mb-2">No Favorites Yet</h3>
+                                <p className="text-gray-400 max-w-sm">
+                                    Click the "Add to List" button on any anime details to save it here.
+                                </p>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-6">
+                                {favorites.map(anime => (
+                                    <AnimeCard
+                                        key={anime.id}
+                                        anime={{ ...anime, title: sanitize(anime.title || anime.name) }}
+                                        onClick={setSelectedAnime}
+                                    />
+                                ))}
+                            </div>
+                        )}
                     </div>
                 );
 
@@ -826,15 +976,18 @@ function App() {
                                 <h3 className="text-lg font-medium text-white mb-4">Content</h3>
                                 <div className="flex items-center justify-between">
                                     <div className="flex flex-col">
-                                        <span className="text-gray-200">Hide Adult Content</span>
-                                        <span className="text-xs text-gray-500">Filter out 18+ content from search results</span>
+                                        <span className="text-gray-200">Content Rating</span>
+                                        <span className="text-xs text-gray-500">Filter content safety</span>
                                     </div>
-                                    <button
-                                        onClick={toggleAdultFilter}
-                                        className={`w-12 h-6 rounded-full transition-colors relative ${hideAdultContent ? 'bg-red-600' : 'bg-gray-700'}`}
+                                    <select
+                                        value={contentFilter}
+                                        onChange={(e) => cycleContentFilter(e.target.value)}
+                                        className="bg-gray-800 text-white border border-gray-700 rounded-lg px-3 py-1 text-sm"
                                     >
-                                        <div className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${hideAdultContent ? 'translate-x-6' : 'translate-x-0'}`} />
-                                    </button>
+                                        <option value="ALL">All (Safe + NSFW)</option>
+                                        <option value="SAFE">Safe (No NSFW)</option>
+                                        <option value="NSFW">NSFW Only</option>
+                                    </select>
                                 </div>
                             </div>
 
@@ -874,43 +1027,58 @@ function App() {
                         {!isLoading && (
                             <>
                                 {/* Hero Section */}
-                                {featuredAnime && !searchQuery && (
-                                    <div className="relative h-[400px] sm:h-[500px] rounded-3xl overflow-hidden group mb-8">
-                                        <img
-                                            src={featuredAnime.bannerUrl}
-                                            alt={featuredAnime.title}
-                                            className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-                                        />
-                                        <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-gray-900/20 to-transparent">
-                                            <div className="absolute bottom-0 left-0 p-8 sm:p-12 w-full sm:w-2/3 space-y-4">
-                                                <span className="px-3 py-1 bg-red-600 text-white text-xs font-bold rounded-full uppercase tracking-wider">
-                                                    Trending on {activeProvider.name}
-                                                </span>
-                                                <h1 className="text-4xl sm:text-6xl font-black text-white leading-tight">
-                                                    {sanitize(featuredAnime.title)}
-                                                </h1>
-                                                <p className="text-gray-200 line-clamp-2 text-lg">
-                                                    {sanitize(featuredAnime.synopsis)}
-                                                </p>
-                                                <div className="flex gap-4 pt-4">
-                                                    <button
-                                                        onClick={() => handlePlay(featuredAnime)}
-                                                        className="px-8 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl flex items-center gap-2 transition-transform hover:scale-105"
-                                                    >
-                                                        <Play className="w-5 h-5 fill-current" />
-                                                        Watch Now
-                                                    </button>
-                                                    <button
-                                                        onClick={() => setSelectedAnime(featuredAnime)}
-                                                        className="px-8 py-3 bg-white/10 hover:bg-white/20 backdrop-blur-md text-white font-bold rounded-xl transition-colors border border-white/10"
-                                                    >
-                                                        More Info
-                                                    </button>
+                                {trendingList.length > 0 && !searchQuery && (() => {
+                                    const featured = trendingList[featuredIndex];
+                                    if (!featured) return null;
+                                    return (
+                                        <div className="relative h-[400px] sm:h-[500px] rounded-3xl overflow-hidden group mb-8">
+                                            <img
+                                                key={featured.id} // Key change triggers animation if CSS configured
+                                                src={featured.bannerUrl}
+                                                alt={featured.title}
+                                                className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 animate-fade-in"
+                                            />
+                                            <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-gray-900/20 to-transparent">
+                                                <div className="absolute bottom-0 left-0 p-8 sm:p-12 w-full sm:w-2/3 space-y-4 animate-slide-up">
+                                                    <span className="px-3 py-1 bg-red-600 text-white text-xs font-bold rounded-full uppercase tracking-wider">
+                                                        Trending #{featuredIndex + 1}
+                                                    </span>
+                                                    <h1 className="text-4xl sm:text-6xl font-black text-white leading-tight">
+                                                        {sanitize(featured.title)}
+                                                    </h1>
+                                                    <p className="text-gray-200 line-clamp-2 text-lg">
+                                                        {sanitize(featured.synopsis)}
+                                                    </p>
+                                                    <div className="flex gap-4 pt-4">
+                                                        <button
+                                                            onClick={() => handlePlay(featured)}
+                                                            className="px-8 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl flex items-center gap-2 transition-transform hover:scale-105"
+                                                        >
+                                                            <Play className="w-5 h-5 fill-current" />
+                                                            Watch Now
+                                                        </button>
+                                                        <button
+                                                            onClick={() => setSelectedAnime(featured)}
+                                                            className="px-8 py-3 bg-white/10 hover:bg-white/20 backdrop-blur-md text-white font-bold rounded-xl transition-colors border border-white/10"
+                                                        >
+                                                            More Info
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                {/* Carousel Indicators */}
+                                                <div className="absolute bottom-8 right-8 flex gap-2">
+                                                    {trendingList.slice(0, 5).map((_, idx) => (
+                                                        <div
+                                                            key={idx}
+                                                            className={`h-1.5 rounded-full transition-all duration-300 ${idx === featuredIndex ? 'w-8 bg-red-600' : 'w-2 bg-white/30'}`}
+                                                        />
+                                                    ))}
                                                 </div>
                                             </div>
                                         </div>
-                                    </div>
-                                )}
+                                    );
+                                })()}
 
                                 {/* Scrollable Lists */}
                                 <HorizontalScrollList
@@ -969,10 +1137,20 @@ function App() {
                                             </h2>
 
                                             <div className="flex gap-2">
+                                                <select
+                                                    value={contentFilter}
+                                                    onChange={(e) => cycleContentFilter(e.target.value)}
+                                                    className="bg-gray-800 text-white border border-gray-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-red-600 hidden sm:block"
+                                                >
+                                                    <option value="ALL">All</option>
+                                                    <option value="SAFE">Safe</option>
+                                                    <option value="NSFW">NSFW</option>
+                                                </select>
+                                                {/* Random Anime Button */}
                                                 {/* Random Anime Button */}
                                                 <button
                                                     onClick={() => {
-                                                        const pool = animeList.length > 0 ? animeList : (featuredAnime ? [featuredAnime] : []);
+                                                        const pool = animeList.length > 0 ? animeList : (trendingList.length > 0 ? trendingList : []);
                                                         if (pool.length > 0) {
                                                             const random = pool[Math.floor(Math.random() * pool.length)];
                                                             handlePlay(random);
@@ -1092,6 +1270,33 @@ function App() {
                                         ))}
                                     </div>
 
+                                    {/* Pagination Controls */}
+                                    {animeList.length > 0 && (
+                                        <div className="flex justify-center items-center gap-4 mt-8 pb-8">
+                                            <button
+                                                onClick={() => setPage(p => Math.max(1, p - 1))}
+                                                disabled={page === 1}
+                                                className={`px-4 py-2 rounded-lg border font-medium transition-colors ${page === 1
+                                                    ? 'border-gray-800 text-gray-600 cursor-not-allowed'
+                                                    : 'border-gray-700 text-gray-300 hover:text-white hover:border-gray-500'
+                                                    }`}
+                                            >
+                                                Previous
+                                            </button>
+                                            <span className="text-gray-400 font-medium">Page {page} of {totalPages || '?'}</span>
+                                            <button
+                                                onClick={() => setPage(p => p + 1)}
+                                                disabled={!hasNextPage}
+                                                className={`px-4 py-2 rounded-lg border font-medium transition-colors ${!hasNextPage
+                                                    ? 'border-gray-800 text-gray-600 cursor-not-allowed'
+                                                    : 'border-gray-700 text-gray-300 hover:text-white hover:border-gray-500'
+                                                    }`}
+                                            >
+                                                Next
+                                            </button>
+                                        </div>
+                                    )}
+
                                     {animeList.length === 0 && (
                                         <div className="text-center py-20 text-gray-500">
                                             <Search className="w-12 h-12 mx-auto mb-4 opacity-20" />
@@ -1127,9 +1332,17 @@ function App() {
                 searchQuery={searchQuery}
                 onSearch={setSearchQuery}
                 onOpenDirectPlay={() => setShowDirectPlay(true)}
+
+                width={sidebarWidth}
+                setWidth={setSidebarWidth}
+                collapsed={isSidebarCollapsed}
+                setCollapsed={setIsSidebarCollapsed}
             />
 
-            <main className="lg:ml-64 min-h-screen pb-20 lg:pb-0 relative">
+            <main
+                className="min-h-screen pb-20 lg:pb-0 relative"
+                style={{ marginLeft: window.innerWidth >= 1024 ? (isSidebarCollapsed ? 80 : sidebarWidth) : 0 }}
+            >
                 {renderContent()}
 
                 {/* Persistent Player Overlay (Only when minimized) */}
@@ -1203,6 +1416,8 @@ function App() {
                 anime={selectedAnime}
                 onClose={() => setSelectedAnime(null)}
                 onPlay={handlePlay}
+                isFavorite={selectedAnime && favorites.some(f => f.id === selectedAnime.id)}
+                onToggleFavorite={toggleFavorite}
             />
 
             <AddSourceModal
