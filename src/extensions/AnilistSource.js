@@ -44,6 +44,7 @@ export class AnilistSource extends Extension {
             episodes: media.episodes,
             genres: media.genres,
             year: media.seasonYear,
+            format: media.format, // Add Format
             type: 'custom',
             // source: media.siteUrl, // REMOVED: Do not use AniList site as video source (it blocks embeds)
             trailer: media.trailer // Store trailer info
@@ -59,8 +60,6 @@ export class AnilistSource extends Extension {
         };
 
         console.log("getTrending variables:", JSON.stringify(variables));
-
-        // Remove internal
 
         // Remove internal
         delete variables._t;
@@ -91,6 +90,7 @@ export class AnilistSource extends Extension {
                 episodes
                 genres
                 seasonYear
+                format
                 siteUrl
                 trailer {
                     id

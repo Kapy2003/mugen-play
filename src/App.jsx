@@ -594,143 +594,7 @@ function App() {
 
     // Render Content based on Tab
     const renderContent = () => {
-        if (playingAnime && !isPlayerMinimized) {
-            const targetUrl = playingAnime.url || playingAnime.streamUrl || playingAnime.source;
-            return (
-                <div className="fixed inset-0 z-50 bg-[#0a0a0a] text-white flex flex-col font-sans animate-fade-in group/player-ui">
-                    {/* Top Navigation Bar */}
-                    <div className="h-14 flex items-center justify-between px-4 bg-black/60 backdrop-blur-md border-b border-white/5 z-20">
-                        <div className="flex items-center gap-4">
-                            <button
-                                onClick={() => setIsPlayerMinimized(true)}
-                                className="p-2 hover:bg-white/10 rounded-full transition-colors text-gray-400 hover:text-white"
-                            >
-                                <Minimize2 size={20} />
-                            </button>
-                            <h2 className="font-semibold text-sm sm:text-base truncate max-w-md cursor-default">
-                                {playingAnime.title}
-                            </h2>
-                        </div>
-
-                        {/* Window Controls (Zoom/Pan removed as requested) */}
-                        <div className="flex items-center gap-3">
-                            <button
-                                onClick={() => setPlayingAnime(null)}
-                                className="p-2 hover:bg-white/10 rounded-full transition-colors text-white hover:text-red-500"
-                                title="Close Player"
-                            >
-                                <X size={20} />
-                            </button>
-
-                            <div className="w-px h-6 bg-white/10 mx-1"></div>
-
-                            <button
-                                onClick={() => setIsSidebarVisible(!isSidebarVisible)}
-                                className={`p-2 rounded-full transition-colors ${isSidebarVisible ? 'bg-white/10 text-white' : 'hover:bg-white/10 text-gray-400'}`}
-                                title="Toggle Sidebar"
-                            >
-                                <PanelRight size={20} />
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* Main Content Area: Split View */}
-                    < div className="flex-1 flex overflow-hidden" >
-                        {/* LEFT COLUMN: Player & Details */}
-                        < div className={`flex-1 flex flex-col overflow-y-auto custom-scrollbar relative transition-all duration-300`
-                        }>
-                            {/* Video Player Container - Reduced Size */}
-                            < div className="w-full max-w-[100vh] mx-auto aspect-video bg-black relative shadow-2xl z-100 ring-1 ring-white/10" >
-                                <VideoPlayer
-                                    src={targetUrl}
-                                    poster={playingAnime.bannerUrl || playingAnime.coverUrl}
-                                    title={playingAnime.title}
-                                    isMinimized={false}
-                                    scale={videoScale}
-                                    xOffset={videoXOffset}
-                                    yOffset={videoYOffset}
-                                    onToggleMinimize={() => setIsPlayerMinimized(true)}
-                                    onClose={() => setPlayingAnime(null)}
-                                />
-                            </div >
-
-                            {/* Anime Details (Below Player) */}
-                            < div className="p-6 sm:p-8 max-w-5xl space-y-6 mt-25" >
-                                <div className="flex flex-col sm:flex-row gap-4 items-start">
-                                    <img
-                                        src={playingAnime.coverUrl}
-                                        alt="Cover"
-                                        className="w-24 sm:w-32 rounded-lg shadow-lg hidden sm:block"
-                                    />
-                                    <div className="flex-1 space-y-3">
-                                        <h1 className="text-2xl sm:text-3xl font-bold leading-tight">{playingAnime.title}</h1>
-                                        <div className="flex flex-wrap items-center gap-3 text-sm text-gray-400">
-                                            <span className="flex items-center gap-1 text-yellow-500 font-medium">
-                                                <Star size={14} fill="currentColor" /> {playingAnime.rating || 'N/A'}
-                                            </span>
-                                            <span>•</span>
-                                            <span>{playingAnime.year}</span>
-                                            <span>•</span>
-                                            <span>{playingAnime.episodes} Episodes</span>
-                                            <div className="flex gap-2 ml-2">
-                                                {playingAnime.genres?.slice(0, 3).map(g => (
-                                                    <span key={g} className="px-2 py-0.5 bg-white/5 border border-white/10 rounded text-xs">{g}</span>
-                                                ))}
-                                            </div>
-                                        </div>
-                                        <p className="text-gray-300 text-sm leading-relaxed max-w-4xl">
-                                            {playingAnime.synopsis}
-                                        </p>
-                                    </div>
-                                </div>
-                            </div >
-                        </div >
-
-                        {/* RIGHT COLUMN: Sidebar (Episodes) */}
-                        < div className={`${isSidebarVisible ? 'w-80 lg:w-96 translate-x-0' : 'w-0 translate-x-full hidden'} bg-[#111] border-l border-white/5 flex flex-col transition-all duration-300 ease-in-out z-20`}>
-                            <div className="p-4 border-b border-white/5 bg-[#111] z-10 sticky top-0 flex justify-between items-center whitespace-nowrap overflow-hidden">
-                                <h3 className="font-bold text-gray-200">Episodes</h3>
-                                <span className="text-xs text-gray-500">{playingAnime.episodesList?.length || playingAnime.episodes || '?'} Total</span>
-                            </div>
-
-                            <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-2">
-                                {/* Generate list if explicit list is missing or empty */}
-                                {((playingAnime.episodesList?.length > 0 && playingAnime.episodesList) || Array.from({ length: playingAnime.episodes || 12 })).map((ep, idx) => {
-                                    const epNum = ep?.number || idx + 1;
-                                    const currentHash = targetUrl.includes(`ep-${epNum}`) || targetUrl.includes(`episode-${epNum}`);
-                                    const isCurrent = currentHash; // loose check
-
-                                    return (
-                                        <button
-                                            key={epNum}
-                                            onClick={() => handlePlay(playingAnime, epNum)}
-                                            className={`w-full flex items-center gap-3 p-3 rounded-lg transition-all group ${isCurrent ? 'bg-red-600 text-white' : 'hover:bg-white/5 text-gray-400'}`}
-                                        >
-                                            <div className="relative shrink-0 w-24 h-16 bg-black/40 rounded overflow-hidden border border-white/5">
-                                                <img
-                                                    src={playingAnime.bannerUrl}
-                                                    className={`w-full h-full object-cover transition-opacity ${isCurrent ? 'opacity-100' : 'opacity-60 group-hover:opacity-100'}`}
-                                                    alt=""
-                                                />
-                                                <div className="absolute inset-0 flex items-center justify-center bg-black/40">
-                                                    <Play size={16} fill="currentColor" className={isCurrent ? 'text-white' : 'text-white/50'} />
-                                                </div>
-                                            </div>
-                                            <div className="text-left flex-1 min-w-0">
-                                                <div className="font-medium truncate text-sm">Episode {epNum}</div>
-                                                <div className="text-xs opacity-60 truncate">
-                                                    {ep?.title || (playingAnime.title ? playingAnime.title.split(' - Episode')[0] : '')}
-                                                </div>
-                                            </div>
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </div >
-                    </div >
-                </div >
-            );
-        }
+        // Player logic moved to persistent overlay
 
         switch (activeTab) {
             case 'extensions':
@@ -1401,64 +1265,97 @@ function App() {
             >
                 {renderContent()}
 
-                {/* Persistent Player Overlay (Only when minimized) */}
-                {playingAnime && isPlayerMinimized && (
-                    <div
-                        className={`
-                            fixed z-50 transition-all duration-300 shadow-2xl overflow-hidden bg-black
-                            ${isPlayerMinimized
-                                ? 'bottom-20 right-4 w-80 h-48 rounded-lg border border-gray-700'
-                                : 'inset-0 lg:ml-64'
-                            }
-                        `}
-                    >
-                        {/* Player Header / Controls (Only visible in full screen mode usually, or we add custom controls) */}
-                        <div className="absolute top-0 left-0 right-0 p-4 z-10 flex justify-between items-start pointer-events-none">
-                            {/* Back Button (Full Screen) */}
-                            {!isPlayerMinimized && (
-                                <button
-                                    onClick={() => setIsPlayerMinimized(true)}
-                                    className="pointer-events-auto bg-black/50 hover:bg-black/70 p-2 rounded-full text-white backdrop-blur-sm transition-colors"
-                                    title="Minimize"
-                                >
-                                    <Minimize2 className="w-5 h-5" />
-                                </button>
-                            )}
-
-                            {/* Close / Expand Controls */}
-                            <div className="flex gap-2 ml-auto pointer-events-auto">
-                                {isPlayerMinimized && (
-                                    <button
-                                        onClick={() => setIsPlayerMinimized(false)}
-                                        className="bg-black/50 hover:bg-black/70 p-1.5 rounded-full text-white backdrop-blur-sm transition-colors"
-                                        title="Expand"
-                                    >
-                                        <Maximize2 className="w-4 h-4" />
+                {/* Unified Persistent Player Overlay */}
+                {playingAnime && (
+                    <div className={`fixed z-50 bg-[#0a0a0a] text-white flex flex-col font-sans transition-all duration-300 shadow-2xl overflow-hidden ${isPlayerMinimized ? 'bottom-4 right-4 w-80 h-48 rounded-lg border border-gray-700' : 'inset-0'}`}>
+                        {/* Top Navigation Bar (Full Screen Only) */}
+                        {!isPlayerMinimized && (
+                            <div className="h-14 flex items-center justify-between px-4 bg-black/60 backdrop-blur-md border-b border-white/5 z-20">
+                                <div className="flex items-center gap-4">
+                                    <button onClick={() => setIsPlayerMinimized(true)} className="p-2 hover:bg-white/10 rounded-full transition-colors text-gray-400 hover:text-white">
+                                        <Minimize2 size={20} />
                                     </button>
-                                )}
-                                <button
-                                    onClick={() => setPlayingAnime(null)}
-                                    className="bg-red-600/80 hover:bg-red-700 p-1.5 rounded-full text-white backdrop-blur-sm transition-colors"
-                                    title="Close Player"
-                                >
-                                    <X className="w-4 h-4" />
-                                </button>
+                                    <h2 className="font-semibold text-sm sm:text-base truncate max-w-md cursor-default">{playingAnime.title}</h2>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <button onClick={() => setPlayingAnime(null)} className="p-2 hover:bg-white/10 rounded-full transition-colors text-white hover:text-red-500" title="Close Player">
+                                        <X size={20} />
+                                    </button>
+                                    <div className="w-px h-6 bg-white/10 mx-1"></div>
+                                    <button onClick={() => setIsSidebarVisible(!isSidebarVisible)} className={`p-2 rounded-full transition-colors ${isSidebarVisible ? 'bg-white/10 text-white' : 'hover:bg-white/10 text-gray-400'}`} title="Toggle Sidebar">
+                                        <PanelRight size={20} />
+                                    </button>
+                                </div>
                             </div>
-                        </div>
+                        )}
 
-                        {/* Player Content */}
-                        <div className="w-full h-full relative group">
-                            <VideoPlayer
-                                src={playingAnime.url || playingAnime.streamUrl || playingAnime.source}
-                                title={playingAnime.title || playingAnime.name}
-                            />
+                        <div className="flex-1 flex overflow-hidden">
+                            {/* Player Column */}
+                            <div className="flex-1 flex flex-col overflow-y-auto custom-scrollbar relative transition-all duration-300">
+                                <div className={`w-full bg-black relative shadow-2xl z-100 ${isPlayerMinimized ? 'h-full' : 'max-w-[100vh] mx-auto ring-1 ring-white/10'}`}>
+                                    <VideoPlayer
+                                        src={playingAnime.url || playingAnime.streamUrl || playingAnime.source}
+                                        poster={playingAnime.bannerUrl || playingAnime.coverUrl}
+                                        title={playingAnime.title}
+                                        isMinimized={isPlayerMinimized}
+                                        scale={videoScale}
+                                        xOffset={videoXOffset}
+                                        yOffset={videoYOffset}
+                                        onToggleMinimize={() => setIsPlayerMinimized(true)}
+                                        onClose={() => setPlayingAnime(null)}
+                                    />
+                                    {/* Mini Overlay Controls */}
+                                    {isPlayerMinimized && (
+                                        <div className="absolute top-0 left-0 right-0 p-2 flex justify-end gap-2 bg-gradient-to-b from-black/80 to-transparent opacity-0 hover:opacity-100 transition-opacity">
+                                            <button onClick={() => setIsPlayerMinimized(false)} className="p-1.5 bg-black/50 hover:bg-black/70 rounded-full text-white backdrop-blur-sm"><Maximize2 size={16} /></button>
+                                            <button onClick={() => setPlayingAnime(null)} className="p-1.5 bg-red-600/80 hover:bg-red-700 rounded-full text-white backdrop-blur-sm"><X size={16} /></button>
+                                        </div>
+                                    )}
+                                </div>
 
-                            {/* Additional Info (Full Screen Only) */}
-                            {!isPlayerMinimized && (
-                                <div className="absolute bottom-0 left-0 right-0 p-8 bg-gradient-to-t from-black via-black/80 to-transparent pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <div className="max-w-4xl">
-                                        <h2 className="text-2xl font-bold text-white mb-2">{playingAnime.title}</h2>
-                                        <p className="text-gray-300 line-clamp-2">{playingAnime.synopsis}</p>
+                                {/* Details (Full Screen Only) */}
+                                {!isPlayerMinimized && (
+                                    <div className="p-6 sm:p-8 max-w-5xl space-y-6 mt-6">
+                                        <div className="flex flex-col sm:flex-row gap-4 items-start">
+                                            <img src={playingAnime.coverUrl} alt="Cover" className="w-24 sm:w-32 rounded-lg shadow-lg hidden sm:block" />
+                                            <div className="flex-1 space-y-3">
+                                                <h1 className="text-2xl sm:text-3xl font-bold leading-tight">{playingAnime.title}</h1>
+                                                <div className="flex flex-wrap items-center gap-3 text-sm text-gray-400">
+                                                    <span className="flex items-center gap-1 text-yellow-500 font-medium"><Star size={14} fill="currentColor" /> {playingAnime.rating || 'N/A'}</span>
+                                                    <span>•</span><span>{playingAnime.year}</span><span>•</span><span>{playingAnime.episodes} Episodes</span>
+                                                    <div className="flex gap-2 ml-2">{playingAnime.genres?.slice(0, 3).map(g => <span key={g} className="px-2 py-0.5 bg-white/5 border border-white/10 rounded text-xs">{g}</span>)}</div>
+                                                </div>
+                                                <p className="text-gray-300 text-sm leading-relaxed max-w-4xl">{playingAnime.synopsis}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Sidebar (Full Screen Only) */}
+                            {!isPlayerMinimized && playingAnime.format !== 'MOVIE' && (
+                                <div className={`${isSidebarVisible ? 'w-80 lg:w-96 translate-x-0' : 'w-0 translate-x-full hidden'} bg-[#111] border-l border-white/5 flex flex-col transition-all duration-300 ease-in-out z-20`}>
+                                    <div className="p-4 border-b border-white/5 bg-[#111] z-10 sticky top-0 flex justify-between items-center whitespace-nowrap overflow-hidden">
+                                        <h3 className="font-bold text-gray-200">Episodes</h3>
+                                        <span className="text-xs text-gray-500">{playingAnime.episodesList?.length || playingAnime.episodes || '?'} Total</span>
+                                    </div>
+                                    <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-2">
+                                        {((playingAnime.episodesList?.length > 0 && playingAnime.episodesList) || Array.from({ length: playingAnime.episodes || 12 })).map((ep, idx) => {
+                                            const epNum = ep?.number || idx + 1;
+                                            const isCurrent = (playingAnime.url || '').includes(`ep-${epNum}`) || (playingAnime.url || '').includes(`episode-${epNum}`);
+                                            return (
+                                                <button key={epNum} onClick={() => handlePlay(playingAnime, epNum)} className={`w-full flex items-center gap-3 p-3 rounded-lg transition-all group ${isCurrent ? 'bg-red-600 text-white' : 'hover:bg-white/5 text-gray-400'}`}>
+                                                    <div className="relative shrink-0 w-24 h-16 bg-black/40 rounded overflow-hidden border border-white/5">
+                                                        <img src={playingAnime.bannerUrl} className={`w-full h-full object-cover transition-opacity ${isCurrent ? 'opacity-100' : 'opacity-60 group-hover:opacity-100'}`} alt="" />
+                                                        <div className="absolute inset-0 flex items-center justify-center bg-black/40"><Play size={16} fill="currentColor" className={isCurrent ? 'text-white' : 'text-white/50'} /></div>
+                                                    </div>
+                                                    <div className="text-left flex-1 min-w-0">
+                                                        <div className="font-medium truncate text-sm">Episode {epNum}</div>
+                                                        <div className="text-xs opacity-60 truncate">{ep?.title || (playingAnime.title ? playingAnime.title.split(' - Episode')[0] : '')}</div>
+                                                    </div>
+                                                </button>
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             )}

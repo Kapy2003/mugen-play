@@ -187,8 +187,8 @@ const VideoPlayer = ({ src, title, onEnded, scale = 1, xOffset = 0, yOffset = -6
     };
 
     return (
-        <div className="space-y-4 h-full">
-            <div className="relative w-full h-full bg-black rounded-xl overflow-hidden shadow-lg border border-gray-800 group">
+        <div className="space-y-4">
+            <div className="relative w-full aspect-video bg-black rounded-xl overflow-hidden shadow-lg border border-gray-800 group">
                 {renderPlayer()}
             </div>
 
