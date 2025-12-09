@@ -10,9 +10,10 @@ import Toast from './components/common/Toast';
 import { ANIME_CATALOG, INITIAL_EXTENSIONS, VIDEO_SOURCES, ANIME_SLUG_OVERRIDES } from './data/constants';
 import { Search, Home, Play, Info, ChevronRight, X, Maximize2, Minimize2, PanelRight, Settings2, MoreVertical, Trash2, Filter, Compass, Shuffle, Star, Heart } from 'lucide-react';
 import { AnilistSource } from './extensions/AnilistSource';
-import { ANIME_KAI_IDS } from './data/anime_ids';
 import HorizontalScrollList from './components/common/HorizontalScrollList';
-import { AnitakuScraper } from './lib/AnitakuScraper';
+import { AnimeLibHiLive } from './lib/anime-lib';
+import LocalSource from './lib/LocalSource';
+import SourceSelector from './components/common/SourceSelector';
 
 function App() {
     // --- State ---
@@ -102,6 +103,9 @@ function App() {
         const saved = localStorage.getItem('mugen_user');
         return saved ? JSON.parse(saved) : null;
     });
+
+    const [playbackSource, setPlaybackSource] = useState('local'); // 'local' | 'web'
+    const [currentEpisodePage, setCurrentEpisodePage] = useState(1); // Pagination
 
     // --- Effects ---
 
@@ -327,165 +331,184 @@ function App() {
     // The previous implementation was used in render. I'll replace usages with direct access or identity.
     const sanitize = (text) => text; // Identity function to avoid breaking existing calls
 
-    const handlePlay = async (anime, episodeNumber = null) => {
+    const handlePlay = async (anime, episodeNumber = null, overrideSource = null) => {
         try {
-            setSelectedAnime(null);
-            setIsPlayerMinimized(false); // Start normal size
-            setIsSidebarVisible(true); // Force Sidebar Open by default
-            addToHistory(anime); // Add to history
-
-            // 1. Check if it's a direct custom item (already has URL)
-            if (anime.url && anime.type === 'custom') {
-                setPlayingAnime({
-                    ...anime,
-                    title: sanitize(anime.title),
-                    name: sanitize(anime.name),
-                    synopsis: sanitize(anime.synopsis)
-                });
-                return;
+            // Determines effective source: override > state > default
+            const effectiveSource = overrideSource || playbackSource;
+            // If we are switching sources via override, update the state
+            if (overrideSource) {
+                setPlaybackSource(overrideSource);
             }
 
-            // 2. Check for enabled "Custom Source" extensions (Portals)
-            // If user has added a custom source (e.g. hianime.to), we use it to "play" (search/embed)
-            const customSource = extensions.find(e => e.enabled && e.type === 'custom' && e.url);
+            // --- 1. Basic UI Setup ---
+            setSelectedAnime(null);
+            setIsPlayerMinimized(false);
+            setIsSidebarVisible(true);
+            addToHistory(anime);
+
+            // Calculate Pagination Page immediately if episode is provided
+            if (episodeNumber) {
+                const newPage = Math.ceil(episodeNumber / 12);
+                setCurrentEpisodePage(newPage);
+            } else {
+                setCurrentEpisodePage(1); // Default to page 1
+            }
+
+            // --- PREPARE DATA OBJECT ---
+            // We need to persist IDs for both sources so we don't lose them when switching
+            // structure: { ...anime, localId: '...', webId: '...' }
+            let updatedAnime = { ...anime };
+
+            // Clean Title for Searching
+            const baseTitle = (anime.title.english || anime.title.romaji || anime.title || '').split(' - Episode')[0].trim();
+            const cleanTitle = baseTitle;
 
             let streamUrl = null;
             let episodesList = [];
+            let resolvedId = null; // The ID for the current source
 
-            if (customSource) {
-                const baseUrl = customSource.url.replace(/\/$/, '');
+            // --- SOURCE HANDLING ---
 
-                if (customSource.name === 'AnimeKai') {
-                    // Direct URL Construction (User Request)
-                    // Format: /watch/[slugified-title]-[suffix]#ep=[num]
-                    const title = anime.title.english || anime.title.romaji || anime.title;
-                    let slug = title.toLowerCase()
-                        .replace(/[^a-z0-9\s-]/g, '') // Remove special chars
-                        .trim()
-                        .replace(/\s+/g, '-');        // Spaces to hyphens
+            // 0. Check for "Custom Source" extensions (Legacy/User configured)
+            // If user has a custom extension enabled, we should respect it or at least check it if playbackSource is "web" or "custom"
+            // For simplicity, if we are in 'web' mode, we check if there are extensions that handle this.
+            // OR if the user manually selected an extension via SourceSelector (which we need to populate)
 
-                    // Check for manual mapping extension
-                    // We need to dynamic import or just assume it's imported at top (I will add import)
-                    const suffix = ANIME_KAI_IDS[anime.id];
-                    if (suffix) {
-                        slug += `-${suffix}`;
+            // To support "without extensions install", we keep the default Hianime Scraper logic in the 'else' block.
+
+            if (effectiveSource === 'local') {
+                // --- LOCAL SOURCE LOGIC ---
+
+                // 1. Try to find ID: existing localId > anime.id (if typical slug) > Search
+                // Note: user's anime.id might be from AniList (int) or scraped (string). 
+                // LocalSource expects a string slug.
+                let targetId = updatedAnime.localId || updatedAnime.id;
+
+                // If ID is numeric (AniList), we CANNOT use it for LocalSource lookup directly usually,
+                // unless we have a specific map. We'll try search if it looks numeric or if getEpisodes fails.
+                const isNumeric = /^\d+$/.test(targetId);
+
+                if (isNumeric) {
+                    // Try searching by title
+                    const searchResults = LocalSource.search(cleanTitle);
+                    if (searchResults.length > 0) {
+                        targetId = searchResults[0].id;
+                        updatedAnime.localId = targetId; // Persist found ID
                     }
+                }
 
-                    streamUrl = `${baseUrl}/watch/${slug}`;
-                    if (episodeNumber) {
-                        streamUrl += `#ep=${episodeNumber}`;
+                // Attempt to fetch episodes
+                episodesList = LocalSource.getEpisodes(targetId);
+
+                // If no episodes found with ID, try fuzzy search by Title as fallback
+                // REVISED: Always try search if direct lookup failed, regardless of ID format.
+                if (!episodesList || episodesList.length === 0) {
+                    console.log(`[LocalSource] Direct lookup failed for ${targetId}, searching for title: ${cleanTitle}`);
+                    const searchResults = LocalSource.search(cleanTitle);
+                    if (searchResults.length > 0) {
+                        targetId = searchResults[0].id;
+                        updatedAnime.localId = targetId;
+                        episodesList = LocalSource.getEpisodes(targetId);
+                        console.log(`[LocalSource] Found via search: ${targetId}`);
                     }
-                } else if (
-                    customSource.name === 'Anitaku' ||
-                    customSource.name === 'HiAnime' ||
-                    customSource.name === 'HiAnimez' ||
-                    customSource.url.includes('anitaku') ||
-                    customSource.url.includes('hianime')
-                ) {
-                    // Anitaku / HiAnime Hybrid Integration
-                    let slug = anime.sourceId; // Reuse slug if already found
-                    let foundEpisodes = null;
+                }
 
-                    if (!slug) {
-                        // 1. Search Anitaku for the Slug if not already known
-                        showToast('Searching Anitaku...', 'info');
-                        try {
-                            const title = anime.title.english || anime.title.romaji || anime.title;
-                            // Clean title for better search (remove " - Episode X" suffix if present)
-                            const cleanTitle = title.split(' - Episode')[0];
+                if (episodesList && episodesList.length > 0) {
+                    resolvedId = targetId;
 
-                            // CHECK OVERRIDES FIRST
-                            // Use exact title matching for overrides
-                            if (ANIME_SLUG_OVERRIDES[cleanTitle] || ANIME_SLUG_OVERRIDES[anime.title.romaji]) {
-                                slug = ANIME_SLUG_OVERRIDES[cleanTitle] || ANIME_SLUG_OVERRIDES[anime.title.romaji];
-                                console.log("Using Manual Override Slug:", slug);
-                            } else {
-                                // Default Search Logic
-                                const results = await AnitakuScraper.search(cleanTitle);
+                    // Determine current episode to play
+                    const targetEpNum = episodeNumber || 1;
+                    const ep = episodesList.find(e => e.number === targetEpNum);
 
-                                if (results && results.length > 0) {
-                                    const match = results[0];
-                                    slug = match.id;
-                                    console.log("Anitaku Match Slug:", slug);
-                                } else {
-                                    throw new Error("Anime not found on Anitaku");
-                                }
-                            }
-
-
-                        } catch (err) {
-                            console.error("Anitaku Search Error:", err);
-                            showToast(`Could not find "${anime.title.english || anime.title}" on Anitaku.`, 'error');
-                            return;
-                        }
-                    }
-
-                    if (slug) {
-                        // Fetch Episode List for Sidebar if needed
-                        if (!anime.episodesList || anime.episodesList.length === 0) {
-                            try {
-                                foundEpisodes = await AnitakuScraper.getEpisodes(slug);
-                                episodesList = foundEpisodes;
-                            } catch (e) {
-                                // ensure we keep existing list if fetch fails but we have one
-                                if (anime.episodesList) episodesList = anime.episodesList;
-                                console.warn("Failed to fetch episodes list:", e);
-                            }
-                        } else {
-                            episodesList = anime.episodesList;
-                        }
-
-                        // Construct HiAnime URL Format: https://hianimez.live/watch/slug/ep-num
-                        const targetNum = episodeNumber || 1;
-                        streamUrl = `https://hianimez.live/watch/${slug}/ep-${targetNum}`;
-
-                        showToast(`Redirecting to Episode ${targetNum}...`, 'success');
+                    if (ep) {
+                        streamUrl = ep.url;
+                        showToast(`Playing Local: Ep ${targetEpNum}`, 'success');
+                    } else {
+                        showToast(`Episode ${targetEpNum} not found locally`, 'error');
                     }
                 } else {
-                    // Generic Search Logic for other sources
-                    let queryText = anime.title.english || anime.title.romaji || anime.title;
-                    if (episodeNumber) {
-                        queryText += ` Episode ${episodeNumber}`;
-                    }
-                    const searchQuery = encodeURIComponent(queryText);
-                    streamUrl = `${baseUrl}/search?q=${searchQuery}&keyword=${searchQuery}`;
+                    showToast(`Anime not found in Local Source`, 'error');
                 }
+
             } else {
-                // 3. Fallback to Active Provider (AniList Trailer)
-                streamUrl = await activeProvider.getStream(anime);
+                // --- WEB SOURCE LOGIC (AnimeLibHiLive / internal) ---
+
+                // GATING: Require an enabled extension to proceed.
+                // Prevents "out of the box" usage without user configuration.
+                const hasEnabledExtension = extensions.some(e => e.type === 'custom' && e.enabled);
+
+                if (!hasEnabledExtension) {
+                    showToast('Playback requires an enabled Extension. Please add one.', 'error');
+                    return;
+                }
+
+                // User explicitly requested to use the new lib file.
+
+                // 1. Resolve Web ID
+                // Prefer persisted webId > anime.sourceId > Search
+                let targetSlug = updatedAnime.webId || updatedAnime.sourceId;
+
+                if (!targetSlug) {
+                    // Search Logic
+                    showToast('Searching Web Source...', 'info');
+                    // Check Overrides
+                    if (ANIME_SLUG_OVERRIDES[cleanTitle] || ANIME_SLUG_OVERRIDES[anime.title.romaji]) {
+                        targetSlug = ANIME_SLUG_OVERRIDES[cleanTitle] || ANIME_SLUG_OVERRIDES[anime.title.romaji];
+                    } else {
+                        // Scraper Search
+                        const results = await AnimeLibHiLive.search(cleanTitle);
+                        if (results && results.length > 0) {
+                            targetSlug = results[0].id;
+                            updatedAnime.webId = targetSlug; // Persist
+                        }
+                    }
+                }
+
+                if (targetSlug) {
+                    updatedAnime.webId = targetSlug; // Ensure persisted
+                    resolvedId = targetSlug;
+
+                    try {
+                        // Fetch Episodes using the new library
+                        const fetchedEps = await AnimeLibHiLive.getEpisodes(targetSlug);
+                        episodesList = fetchedEps;
+                    } catch (err) {
+                        console.warn("Web fetch error", err);
+                        // Fallback to existing list if available?
+                        episodesList = anime.episodesList || [];
+                    }
+
+                    const targetNum = episodeNumber || 1;
+                    // Use the scraper's BASE_URL logic or construct standard link
+                    // The lib file defines BASE_URL = "https://hianimez.live/watch"
+                    streamUrl = `https://hianimez.live/watch/${targetSlug}/ep-${targetNum}`;
+                    showToast(`Playing Web: Ep ${targetNum}`, 'success');
+                } else {
+                    showToast('Anime not found on Web Source', 'error');
+                }
             }
 
-            setVideoScale(1); // Reset zoom on new play
+            // --- FINAL STATE UPDATE ---
+            setVideoScale(1);
 
-            // Clean title to prevent accumulating suffixes (e.g. "Title - Episode 1 - Episode 2")
-            const baseTitle = (anime.title.english || anime.title.romaji || anime.title || '').split(' - Episode')[0];
+            // Should we auto-zoom for Hianime web?
+            if (effectiveSource === 'web' || (streamUrl && streamUrl.includes('hianime'))) {
+                setVideoScale(1.0);
+                setVideoXOffset(0);
+                setVideoYOffset(-100);
+            } else {
+                setVideoYOffset(0);
+            }
 
             setPlayingAnime({
-                ...anime,
+                ...updatedAnime, // Contains localId and webId now
                 streamUrl,
-                episodesList: episodesList || [], // Store fetched episodes
-                sourceId: anime.sourceId || (customSource && customSource.name === 'AnimeKai' ? null : (typeof slug !== 'undefined' ? slug : null)), // persist slug if found
-                title: sanitize(episodeNumber ? `${baseTitle} - Episode ${episodeNumber}` : baseTitle),
-                name: sanitize(anime.name),
-                synopsis: sanitize(anime.synopsis)
+                currentEpisode: episodeNumber, // Track current episode for UI highlighing
+                episodesList: episodesList || [], // The list specifically for the CURRENT source
+                title: episodeNumber ? `${baseTitle} - Episode ${episodeNumber}` : baseTitle,
+                // We keep sourceId for legacy compatibility if needed, but rely on localId/webId
+                sourceId: resolvedId
             });
-
-            // Force Sidebar Open (User Request: Default Open)
-            setIsSidebarVisible(true);
-
-            // AUTO-ZOOM: If accessing Anitaku (iframe), zoom in to crop sidebars automatically
-            const isAnitakuSource = (episodesList && episodesList.length > 0) ||
-                (streamUrl && (streamUrl.includes('hianime') || streamUrl.includes('anitaku')));
-
-            if (isAnitakuSource) {
-                setVideoScale(1.0); // Hardcoded: 100% Crop
-                setVideoXOffset(0); // Hardcoded: 0 Pos
-                setVideoYOffset(-100); // Hardcoded: -100 Top
-            } else {
-                setVideoScale(1);
-                setVideoXOffset(0);
-                setVideoYOffset(0); // Reset for others
-            }
 
         } catch (error) {
             console.error("Play Error", error);
@@ -846,7 +869,7 @@ function App() {
                                 </div>
                                 <h3 className="text-xl font-bold text-white mb-2">No Favorites Yet</h3>
                                 <p className="text-gray-400 max-w-sm">
-                                    Click the "Add to List" button on any anime details to save it here.
+                                    Click the &quot;Add to List&quot; button on any anime details to save it here.
                                 </p>
                             </div>
                         ) : (
@@ -1289,18 +1312,41 @@ function App() {
                     <div className={`fixed z-50 bg-[#0a0a0a] text-white flex flex-col font-sans transition-all duration-300 shadow-2xl overflow-hidden ${isPlayerMinimized ? 'bottom-4 right-4 w-80 h-48 rounded-lg border border-gray-700' : 'inset-0'}`}>
                         {/* Top Navigation Bar (Full Screen Only) */}
                         {!isPlayerMinimized && (
-                            <div className="h-14 flex items-center justify-between px-4 bg-black/60 backdrop-blur-md border-b border-white/5 z-20">
-                                <div className="flex items-center gap-4">
-                                    <button onClick={() => setIsPlayerMinimized(true)} className="p-2 hover:bg-white/10 rounded-full transition-colors text-gray-400 hover:text-white">
+                            <div className="h-16 flex items-center justify-between px-6 bg-[#050505] border-b border-white/5 z-20 gap-4">
+                                <div className="flex items-center gap-4 flex-1 min-w-0">
+                                    <button onClick={() => setIsPlayerMinimized(true)} className="p-2 hover:bg-white/10 rounded-full transition-colors text-gray-400 hover:text-white shrink-0">
                                         <Minimize2 size={20} />
                                     </button>
-                                    <h2 className="font-semibold text-sm sm:text-base truncate max-w-md cursor-default">{playingAnime.title}</h2>
+
+                                    {/* Title (Mobile only or condensed) */}
+                                    <h2 className="font-semibold text-sm sm:text-base truncate text-gray-300">{playingAnime.title}</h2>
                                 </div>
-                                <div className="flex items-center gap-3">
+
+                                <div className="flex items-center gap-4 shrink-0">
+                                    {/* URL / Stream Display Pill - Moved to Right */}
+                                    <div className="hidden md:flex items-center px-4 py-2 bg-[#0a0a0a] border border-white/10 rounded-full max-w-md w-64 hover:border-white/20 transition-colors group">
+                                        <div className="w-2 h-2 rounded-full bg-green-500 mr-3 animate-pulse"></div>
+                                        <input
+                                            type="text"
+                                            readOnly
+                                            value={playingAnime.streamUrl || '...'}
+                                            className="w-full bg-transparent border-none focus:ring-0 text-xs font-mono text-gray-400 placeholder-gray-700 group-hover:text-gray-300 transition-colors"
+                                            onClick={(e) => e.target.select()}
+                                        />
+                                    </div>
+
+                                    <SourceSelector
+                                        options={[{ id: 'local', name: 'Local File' }, { id: 'web', name: 'Hianime (Web)' }]}
+                                        currentId={playbackSource}
+                                        onSelect={(newSource) => handlePlay(playingAnime, null, newSource)}
+                                        className="z-50"
+                                    />
+
+                                    <div className="h-6 w-px bg-white/10 mx-2"></div>
+
                                     <button onClick={() => setPlayingAnime(null)} className="p-2 hover:bg-white/10 rounded-full transition-colors text-white hover:text-red-500" title="Close Player">
                                         <X size={20} />
                                     </button>
-                                    <div className="w-px h-6 bg-white/10 mx-1"></div>
                                     <button onClick={() => setIsSidebarVisible(!isSidebarVisible)} className={`p-2 rounded-full transition-colors ${isSidebarVisible ? 'bg-white/10 text-white' : 'hover:bg-white/10 text-gray-400'}`} title="Toggle Sidebar">
                                         <PanelRight size={20} />
                                     </button>
@@ -1311,7 +1357,7 @@ function App() {
                         <div className="flex-1 flex overflow-hidden">
                             {/* Player Column */}
                             <div className="flex-1 flex flex-col overflow-y-auto custom-scrollbar relative transition-all duration-300">
-                                <div className={`w-full bg-black relative shadow-2xl z-100 ${isPlayerMinimized ? 'h-full' : 'max-w-[100vh] mx-auto ring-1 ring-white/10'}`}>
+                                <div className={`w-full bg-black relative shadow-2xl z-[100] ${isPlayerMinimized ? 'h-full' : 'max-w-[100vh] mx-auto ring-1 ring-white/10'}`}>
                                     <VideoPlayer
                                         src={playingAnime.url || playingAnime.streamUrl || playingAnime.source}
                                         poster={playingAnime.bannerUrl || playingAnime.coverUrl}
@@ -1359,44 +1405,96 @@ function App() {
                                         <span className="text-xs text-gray-500">{playingAnime.episodesList?.length || playingAnime.episodes || '?'} Total</span>
                                     </div>
                                     <div className="flex-1 overflow-y-auto no-scrollbar p-2 space-y-2">
-                                        {((playingAnime.episodesList?.length > 0 && playingAnime.episodesList) || Array.from({ length: playingAnime.episodes || 12 })).map((ep, idx) => {
-                                            const epNum = ep?.number || idx + 1;
-                                            const isCurrent = (playingAnime.url || '').includes(`ep-${epNum}`) || (playingAnime.url || '').includes(`episode-${epNum}`);
 
-                                            // Check if episode is released
-                                            const isReleased = !playingAnime.nextAiringEpisode || epNum < playingAnime.nextAiringEpisode.episode;
+                                        {/* Pagination Controls in Sidebar */}
+                                        <div className="flex justify-between items-center px-2 pb-2">
+                                            <button
+                                                onClick={() => setCurrentEpisodePage(p => Math.max(1, p - 1))}
+                                                disabled={currentEpisodePage === 1}
+                                                className="text-xs text-gray-400 hover:text-white disabled:opacity-30 px-2 py-1"
+                                            >
+                                                Prev
+                                            </button>
 
-                                            return (
-                                                <button
-                                                    key={epNum}
-                                                    onClick={() => isReleased && handlePlay(playingAnime, epNum)}
-                                                    disabled={!isReleased}
-                                                    className={`w-full flex items-center gap-3 p-3 rounded-lg transition-all group relative overflow-hidden ${isCurrent ? 'bg-red-600 text-white' : (isReleased ? 'hover:bg-white/5 text-gray-400' : 'opacity-40 cursor-not-allowed text-gray-600')}`}
-                                                >
-                                                    <div className="relative shrink-0 w-24 h-16 bg-black/40 rounded overflow-hidden border border-white/5">
-                                                        <img src={playingAnime.bannerUrl} className={`w-full h-full object-cover transition-opacity ${isCurrent ? 'opacity-100' : (isReleased ? 'opacity-60 group-hover:opacity-100' : 'opacity-30 grayscale')}`} alt="" />
-                                                        <div className="absolute inset-0 flex items-center justify-center bg-black/40">
-                                                            {isReleased ? (
-                                                                <Play size={16} fill="currentColor" className={isCurrent ? 'text-white' : 'text-white/50'} />
-                                                            ) : (
-                                                                <div className="flex flex-col items-center">
-                                                                    {/* Using Clock icon if available, otherwise just text/lock */}
-                                                                    <span className="text-xs font-bold text-white/70 uppercase">Not Aired</span>
-                                                                </div>
-                                                            )}
+                                            {/* Modernized Minimal Input */}
+                                            <div className="flex items-center gap-1 text-xs bg-white/5 px-2 py-1 rounded-md border border-white/5 hover:border-white/20 transition-colors group focus-within:border-white/40">
+                                                <input
+                                                    type="number"
+                                                    min="1"
+                                                    max={Math.ceil((playingAnime.episodesList?.length || playingAnime.episodes || 0) / 12) || 1}
+                                                    value={currentEpisodePage}
+                                                    onChange={(e) => {
+                                                        const valStr = e.target.value;
+                                                        if (valStr === '') {
+                                                            setCurrentEpisodePage('');
+                                                            return;
+                                                        }
+                                                        const val = parseInt(valStr);
+                                                        const maxPages = Math.ceil((playingAnime.episodesList?.length || playingAnime.episodes || 0) / 12) || 1;
+                                                        if (!isNaN(val) && val >= 1 && val <= maxPages) {
+                                                            setCurrentEpisodePage(val);
+                                                        }
+                                                    }}
+                                                    className="w-10 bg-transparent text-center outline-none text-gray-200 font-medium no-spinner focus:text-white"
+                                                    onKeyDown={(e) => e.stopPropagation()} // Prevent key bubbling
+                                                />
+                                                <span className="text-white/30 select-none">/</span>
+                                                <span className="text-white/30 select-none">{Math.ceil((playingAnime.episodesList?.length || playingAnime.episodes || 0) / 12) || 1}</span>
+                                            </div>
+                                            <button
+                                                onClick={() => setCurrentEpisodePage(p => Math.min((Math.ceil((playingAnime.episodesList?.length || playingAnime.episodes || 0) / 12) || 1), (Number(p) || 1) + 1))}
+                                                disabled={(Number(currentEpisodePage) || 1) === (Math.ceil((playingAnime.episodesList?.length || playingAnime.episodes || 0) / 12) || 1)}
+                                                className="text-xs text-gray-400 hover:text-white disabled:opacity-30 px-2 py-1"
+                                            >
+                                                Next
+                                            </button>
+                                        </div>
+
+
+                                        {((playingAnime.episodesList?.length > 0 && playingAnime.episodesList) || Array.from({ length: playingAnime.episodes || 12 }))
+                                            .slice(((Number(currentEpisodePage) || 1) - 1) * 12, (Number(currentEpisodePage) || 1) * 12)
+                                            .map((ep, idx) => {
+                                                const epNum = ep?.number || (((Number(currentEpisodePage) || 1) - 1) * 12) + idx + 1;
+                                                // Robust check using strict episode number if available, fallback to URL matching
+                                                const isCurrent = (playingAnime.currentEpisode === epNum) ||
+                                                    (playingAnime.url || '').includes(`ep-${epNum}`) ||
+                                                    (playingAnime.url || '').includes(`episode-${epNum}`) ||
+                                                    (playingAnime.streamUrl && playingAnime.streamUrl.includes(`ep-${epNum}`));
+
+                                                // Check if episode is released
+                                                const isReleased = !playingAnime.nextAiringEpisode || epNum < playingAnime.nextAiringEpisode.episode;
+
+                                                return (
+                                                    <button
+                                                        key={epNum}
+                                                        onClick={() => isReleased && handlePlay(playingAnime, epNum)}
+                                                        disabled={!isReleased}
+                                                        className={`w-full flex items-center gap-3 p-3 rounded-lg transition-all group relative overflow-hidden ${isCurrent ? 'bg-red-600 text-white' : (isReleased ? 'hover:bg-white/5 text-gray-400' : 'opacity-40 cursor-not-allowed text-gray-600')}`}
+                                                    >
+                                                        <div className="relative shrink-0 w-24 h-16 bg-black/40 rounded overflow-hidden border border-white/5">
+                                                            <img src={playingAnime.bannerUrl} className={`w-full h-full object-cover transition-opacity ${isCurrent ? 'opacity-100' : (isReleased ? 'opacity-60 group-hover:opacity-100' : 'opacity-30 grayscale')}`} alt="" />
+                                                            <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                                                                {isReleased ? (
+                                                                    <Play size={16} fill="currentColor" className={isCurrent ? 'text-white' : 'text-white/50'} />
+                                                                ) : (
+                                                                    <div className="flex flex-col items-center">
+                                                                        {/* Using Clock icon if available, otherwise just text/lock */}
+                                                                        <span className="text-xs font-bold text-white/70 uppercase">Not Aired</span>
+                                                                    </div>
+                                                                )}
+                                                            </div>
                                                         </div>
-                                                    </div>
-                                                    <div className="text-left flex-1 min-w-0">
-                                                        <div className="font-medium truncate text-sm">Episode {epNum}</div>
-                                                        <div className="text-xs opacity-60 truncate">
-                                                            {!isReleased && playingAnime.nextAiringEpisode && epNum === playingAnime.nextAiringEpisode.episode
-                                                                ? `Airing in ${Math.round(playingAnime.nextAiringEpisode.timeUntilAiring / 86400)} days`
-                                                                : (ep?.title || (playingAnime.title ? playingAnime.title.split(' - Episode')[0] : ''))}
+                                                        <div className="text-left flex-1 min-w-0">
+                                                            <div className="font-medium truncate text-sm">Episode {epNum}</div>
+                                                            <div className="text-xs opacity-60 truncate">
+                                                                {!isReleased && playingAnime.nextAiringEpisode && epNum === playingAnime.nextAiringEpisode.episode
+                                                                    ? `Airing in ${Math.round(playingAnime.nextAiringEpisode.timeUntilAiring / 86400)} days`
+                                                                    : (ep?.title || (playingAnime.title ? playingAnime.title.split(' - Episode')[0] : ''))}
+                                                            </div>
                                                         </div>
-                                                    </div>
-                                                </button>
-                                            );
-                                        })}
+                                                    </button>
+                                                );
+                                            })}
                                     </div>
                                 </div>
                             )}
@@ -1406,7 +1504,7 @@ function App() {
             </main>
 
             {/* Modals & Overlays */}
-            <AnimeDetailModal
+            < AnimeDetailModal
                 anime={selectedAnime}
                 onClose={() => setSelectedAnime(null)}
                 onPlay={handlePlay}
@@ -1431,14 +1529,16 @@ function App() {
                 onPlay={handleDirectPlay}
             />
 
-            {toast && (
-                <Toast
-                    message={toast.message}
-                    type={toast.type}
-                    onClose={() => setToast(null)}
-                />
-            )}
-        </div>
+            {
+                toast && (
+                    <Toast
+                        message={toast.message}
+                        type={toast.type}
+                        onClose={() => setToast(null)}
+                    />
+                )
+            }
+        </div >
     );
 }
 

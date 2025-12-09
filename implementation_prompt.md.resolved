@@ -1,0 +1,61 @@
+# Implementation Prompt: Player-Only Source Selector with Local Data Integration
+
+**Objective:**
+Refactor the existing anime streaming application to support a "Local Data" source (reading from a JSON file) alongside the existing "Web" (Hianime) source. The source selector must be **exclusive to the Video Player UI**, allowing live switching between sources without affecting the global browsing experience.
+
+## 1. Data Preparation (Scripts)
+Create a script [scripts/convert_jsonl.js](file:///home/kapy/codes/other/my-own-projects/test-delete/scripts/convert_jsonl.js) to convert your scraped [.jsonl](file:///home/kapy/codes/other/my-own-projects/test-delete/anime_az_list_with_iframes-hianimelive.jsonl) data into a structured [public/anime_data.json](file:///home/kapy/codes/other/my-own-projects/test-delete/public/anime_data.json).
+**Key Logic:**
+-   Read [.jsonl](file:///home/kapy/codes/other/my-own-projects/test-delete/anime_az_list_with_iframes-hianimelive.jsonl) file.
+-   Generate readable titles from slugs if scraped titles are invalid (e.g., "12TV" -> "Hackroots").
+-   Map `embed_url` to an episodes array with direct links.
+-   Output dictionary keyed by `slug`.
+
+## 2. Local Source Logic ([src/lib/LocalSource.js](file:///home/kapy/codes/other/my-own-projects/test-delete/src/lib/LocalSource.js))
+Implement a [LocalSource](file:///home/kapy/codes/other/my-own-projects/test-delete/src/lib/LocalSource.js#7-104) class that:
+-   Imports [anime_data.json](file:///home/kapy/codes/other/my-own-projects/test-delete/src/data/anime_data.json).
+-   **[search(query)](file:///home/kapy/codes/other/my-own-projects/test-delete/src/lib/LocalSource.js#33-69)**: Performs a fuzzy search against both `title` AND [id](file:///home/kapy/codes/other/my-own-projects/test-delete/src/components/player/VideoPlayer.jsx#5-213) (slug).
+-   **[getEpisodes(id)](file:///home/kapy/codes/other/my-own-projects/test-delete/src/lib/HianimeLiveScraper.js#54-127)**: Returns the episode list for a given ID.
+
+## 3. Component: Source Selector ([src/components/common/SourceSelector.jsx](file:///home/kapy/codes/other/my-own-projects/test-delete/src/components/common/SourceSelector.jsx))
+Create a reusable dropdown component:
+-   **Props**: `options` (Array of `{id, name}`), `currentId`, `onSelect`.
+-   **UI**: Simple dropdown/select element styled with Tailwind (glassmorphism).
+
+## 4. Main Application Overhaul ([src/App.jsx](file:///home/kapy/codes/other/my-own-projects/test-delete/src/App.jsx))
+
+### A. State Management
+Add state variables:
+```javascript
+const [playbackSource, setPlaybackSource] = useState('local'); // 'local' | 'web'
+const [currentEpisodePage, setCurrentEpisodePage] = useState(1); // Pagination
+```
+
+### B. Refactor [handlePlay](file:///home/kapy/codes/other/my-own-projects/test-delete/src/App.jsx#330-495)
+Modify [handlePlay](file:///home/kapy/codes/other/my-own-projects/test-delete/src/App.jsx#330-495) to accept an `overrideSource` and persist source IDs independently to fix switching bugs.
+**Requirements:**
+1.  **Dual ID Persistence**: Store `localId` AND `webId` in the `playingAnime` state object.
+2.  **Source Strategy**:
+    -   If `source === 'local'`: Use [LocalSource](file:///home/kapy/codes/other/my-own-projects/test-delete/src/lib/LocalSource.js#7-104) to find `localId` (or searching title).
+    -   If `source === 'web'`: Use `HianimeScraper` to find `webId`.
+3.  **Title Cleaning**: Strip " - Episode X" suffixes before searching to prevent recursive title pollution.
+4.  **Smart Pagination**: Set `currentEpisodePage = Math.ceil(episodeNumber / 12)` so the sidebar opens to the correct page.
+
+### C. Player UI Updates
+Update the Player Overlay section:
+1.  **Header**: Add the [SourceSelector](file:///home/kapy/codes/other/my-own-projects/test-delete/src/components/common/SourceSelector.jsx#4-36) component (Options: "Local File", "Hianime (Web)").
+    -   `onSelect`: Call [handlePlay(playingAnime, currentEpisode, newSource)](file:///home/kapy/codes/other/my-own-projects/test-delete/src/App.jsx#330-495).
+2.  **Debug Bar**: Add a small read-only text input showing `playingAnime.streamUrl` for verification.
+
+### D. Sidebar Pagination
+Update the Episode List Sidebar:
+1.  **Limit**: Show only **12 episodes** per page.
+2.  **Controls**: Add "Prev" and "Next" buttons at the top of the sidebar.
+3.  **State**: Drive the list using `currentEpisodePage` state.
+
+## 5. Persistence Logic (Crucial)
+Ensure that when switching from **Local -> Web -> Local**:
+-   The app remembers the original `localId` (e.g. `hackroots`) and does NOT try to search for the `webId` (e.g. `hack-roots`) in the local file, which would fail.
+
+---
+**Use this prompt to replicate the robust source switching system in your production codebase.**

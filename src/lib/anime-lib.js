@@ -14,10 +14,10 @@ const keys = {
 };
 
 /**
- * Anitaku (formerly GogoAnime) Scraper
+ * HianimeLive Lib (formerly Anitaku)
  * Handles searching, episode fetching, and server extraction
  */
-export const AnitakuScraper = {
+export const AnimeLibHiLive = {
     /**
      * Search for anime
      * Custom implementation: Directly navigates to HiAnime (anitaku mirror) search results
@@ -32,7 +32,7 @@ export const AnitakuScraper = {
                 .replace(/\s+/g, '-');
 
             const directUrl = `${BASE_URL}/${slug}`;
-            console.log(`[AnitakuScraper] Generating Direct URL (No Fetch): ${directUrl}`);
+            console.log(`[AnimeLibHiLive] Generating Direct URL (No Fetch): ${directUrl}`);
 
             // SKIP FETCH (CORS workaround)
             // We return the slugified result directly.
@@ -46,7 +46,7 @@ export const AnitakuScraper = {
             }];
 
         } catch (error) {
-            console.error("[AnitakuScraper] Direct Search Error:", error);
+            console.error("[AnimeLibHiLive] Direct Search Error:", error);
             return [];
         }
     },
@@ -58,10 +58,12 @@ export const AnitakuScraper = {
         try {
             let url = id;
             if (!id.includes("http")) {
-                url = `${BASE_URL}/category/${id}`;
+                // Fix: Hianimez uses /watch/slug directly, not /category/slug
+                // BASE_URL is .../watch, so just append ID
+                url = `${BASE_URL}/${id}`;
             }
 
-            console.log(`[AnitakuScraper] Fetching page: ${url}`);
+            console.log(`[AnimeLibHiLive] Fetching page: ${url}`);
             const response = await fetch(url);
             if (!response.ok) throw new Error(`Failed to fetch page: ${response.status}`);
             const html = await response.text();
@@ -69,84 +71,109 @@ export const AnitakuScraper = {
             const parser = new DOMParser();
             const doc = parser.parseFromString(html, 'text/html');
 
-            // Strategy 1: Check if episodes are already in the DOM (Common in Anitaku)
+            // Strategy 1: Parse DOM (Partial list usually)
             const directFromDom = this._parseEpisodeList(doc);
+
+            // Strategy 2: AJAX (Full list)
+            // User Feedback: "Why not hard code?" -> Make it robust.
+            // Always try AJAX if we can find the movie ID, because DOM often hides episodes.
+            const movieId = doc.getElementById('movie_id')?.value || '';
+
+            if (movieId) {
+                try {
+                    const alias = doc.getElementById('alias')?.value || '';
+                    const epStart = '0';
+                    const epEnd = '100000'; // Hardcode huge number to get all
+
+                    const params = new URLSearchParams({
+                        ep_start: epStart,
+                        ep_end: epEnd,
+                        id: movieId,
+                        alias: alias,
+                        default_ep: 0
+                    });
+
+                    const ajaxUrl = `${AJAX_URL}?${params.toString()}`;
+                    console.log(`[AnimeLibHiLive] Fetching AJAX list: ${ajaxUrl}`);
+
+                    const ajaxResponse = await fetch(ajaxUrl);
+                    if (ajaxResponse.ok) {
+                        const ajaxHtml = await ajaxResponse.text();
+                        const ajaxDoc = parser.parseFromString(ajaxHtml, 'text/html');
+                        const ajaxEpisodes = this._parseEpisodeList(ajaxDoc);
+
+                        if (ajaxEpisodes.length > directFromDom.length) {
+                            console.log(`[AnimeLibHiLive] AJAX returned more episodes (${ajaxEpisodes.length}) than DOM (${directFromDom.length}). Using AJAX.`);
+                            return ajaxEpisodes;
+                        }
+                    }
+                } catch (e) {
+                    console.warn("[AnimeLibHiLive] AJAX fetch failed, falling back to DOM.", e);
+                }
+            }
+
+            // Fallback to DOM if AJAX failed or didn't yield more results
             if (directFromDom.length > 0) {
-                console.log(`[AnitakuScraper] Found ${directFromDom.length} episodes directly in DOM.`);
                 return directFromDom;
             }
 
-            // Strategy 2: AJAX Fallback
-            const epList = doc.querySelectorAll('#episode_page > li > a');
-            let epStart = '';
-            let epEnd = '';
 
-            if (epList.length > 0) {
-                const first = epList[0];
-                const last = epList[epList.length - 1];
-
-                // Try 'ep_start' attribute or 'data-value' parsing
-                epStart = first.getAttribute('ep_start');
-                epEnd = last.getAttribute('ep_end');
-
-                if (!epStart && first.getAttribute('data-value')) {
-                    const parts = first.getAttribute('data-value').split('-');
-                    epStart = parts[0];
-                }
-                if (!epEnd && last.getAttribute('data-value')) {
-                    const parts = last.getAttribute('data-value').split('-');
-                    epEnd = parts[1] || parts[0];
-                }
-            }
-
-            const movieId = doc.getElementById('movie_id')?.value || '';
-            const alias = doc.getElementById('alias')?.value || '';
-
-            const params = new URLSearchParams({
-                ep_start: epStart || '0',
-                ep_end: epEnd || '10000', // Default fallbacks
-                id: movieId,
-                alias: alias,
-                default_ep: 0
-            });
-
-            const ajaxUrl = `${AJAX_URL}?${params.toString()}`;
-            const ajaxResponse = await fetch(ajaxUrl);
-            const ajaxHtml = await ajaxResponse.text();
-
-            const ajaxDoc = parser.parseFromString(ajaxHtml, 'text/html');
-            const episodes = this._parseEpisodeList(ajaxDoc);
-
-            return episodes;
 
         } catch (error) {
-            console.error("[AnitakuScraper] Error getting episodes:", error);
+            console.error("[AnimeLibHiLive] Error getting episodes:", error);
             throw error;
         }
     },
 
     _parseEpisodeList(doc) {
-        const listItems = doc.querySelectorAll('#episode_related > li');
+        // Fix: Hianimez nests episodes in <ul class="ep-range"> inside #episode_related or similar
+        // Removing '>' allows matching descendants. Adding .ep-range li specifically.
+        const listItems = doc.querySelectorAll('#episode_related li, .ep-range li');
         const episodes = [];
 
         listItems.forEach(li => {
             const a = li.querySelector('a');
             if (!a) return;
 
-            const href = a.getAttribute('href').trim(); // /bleach-episode-1
-            const nameText = li.querySelector('div.name')?.textContent.trim() || '';
+            const href = a.getAttribute('href').trim(); // /watch/one-piece/ep-1
 
-            let number = 0;
-            const numMatch = nameText.match(/(\d+(\.\d+)?)/);
-            if (numMatch) {
-                number = parseFloat(numMatch[1]);
+            // Fix: Parse Hianimez structure
+            // 1. Check data-num attribute
+            // 2. Check <b> tag content
+            // 3. Fallback to name parsing
+            let number = parseFloat(a.getAttribute('data-num'));
+            if (isNaN(number)) {
+                const bTag = a.querySelector('b');
+                if (bTag) {
+                    number = parseFloat(bTag.textContent);
+                }
+            }
+
+            // Parse Title
+            let title = '';
+            const dTitle = a.querySelector('.d-title');
+            if (dTitle) {
+                title = dTitle.textContent.trim();
+            } else {
+                const divName = li.querySelector('div.name');
+                if (divName) title = divName.textContent.trim();
+            }
+
+            // Name fallback
+            if (!title) title = `Episode ${number}`;
+
+            // Fallback number parsing from title/name if still missing
+            if (isNaN(number)) {
+                const numMatch = title.match(/(\d+(\.\d+)?)/);
+                if (numMatch) number = parseFloat(numMatch[1]);
+                if (isNaN(number)) number = 0;
             }
 
             episodes.push({
                 id: href.replace(/^\//, ''),
                 number: number,
-                url: `${BASE_URL}${href}`,
-                title: nameText
+                url: `https://hianimez.live${href}`, // Force root domain + href (which has /watch)
+                title: title
             });
         });
 
@@ -165,7 +192,7 @@ export const AnitakuScraper = {
             const urlObj = new URL(embedUrl);
             const id = urlObj.searchParams.get('id'); // Encrypted ID
 
-            console.log(`[AnitakuScraper] Extracting from: ${embedUrl}`);
+            console.log(`[AnimeLibHiLive] Extracting from: ${embedUrl}`);
             const response = await fetch(embedUrl);
             const html = await response.text();
 
@@ -177,8 +204,8 @@ export const AnitakuScraper = {
             if (!id || !scriptValue) throw new Error("Missing ID or Script Value");
 
             // Decrypt token, Encrypt ID => Params
-            const decryptedToken = await CryptoUtils.decrypt(scriptValue, KEYS.key, KEYS.iv);
-            const encryptedId = await CryptoUtils.encrypt(id, KEYS.key, KEYS.iv);
+            const decryptedToken = await CryptoUtils.decrypt(scriptValue, keys.key, keys.iv);
+            const encryptedId = await CryptoUtils.encrypt(id, keys.key, keys.iv);
 
             // Fetch Encrypted AJAX
             const ajaxUrl = `${urlObj.protocol}//${urlObj.host}/encrypt-ajax.php?id=${encryptedId}&alias=${decryptedToken}`;
@@ -189,7 +216,7 @@ export const AnitakuScraper = {
             const encryptedJson = await encryptedRes.json();
 
             // Decrypt Response Data
-            const decryptedDataStr = await CryptoUtils.decrypt(encryptedJson.data, KEYS.secondKey, KEYS.iv);
+            const decryptedDataStr = await CryptoUtils.decrypt(encryptedJson.data, keys.secondKey, keys.iv);
             const data = JSON.parse(decryptedDataStr);
 
             // Extract Sources
@@ -204,7 +231,7 @@ export const AnitakuScraper = {
             return sources;
 
         } catch (error) {
-            console.error("[AnitakuScraper] Error extracting video:", error);
+            console.error("[AnimeLibHiLive] Error extracting video:", error);
             throw error;
         }
     }

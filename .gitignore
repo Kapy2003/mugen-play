@@ -34,3 +34,12 @@ coverage
 
 # Vite
 *.tsbuildinfo
+
+# CSV
+*.csv
+.vscode/
+!.vscode/settings.json
+
+#data-dump
+data-dump/
+
