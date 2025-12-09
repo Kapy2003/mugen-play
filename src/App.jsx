@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Sidebar from './components/layout/Sidebar';
 import AnimeCard from './components/anime/AnimeCard';
 import AnimeDetailModal from './components/anime/AnimeDetailModal';
@@ -8,7 +8,7 @@ import AddSourceModal from './components/extensions/AddSourceModal';
 import DirectPlayModal from './components/player/DirectPlayModal';
 import Toast from './components/common/Toast';
 import { ANIME_CATALOG, INITIAL_EXTENSIONS, VIDEO_SOURCES, ANIME_SLUG_OVERRIDES } from './data/constants';
-import { Search, Home, Play, Info, ChevronRight, X, Maximize2, Minimize2, PanelRight, Settings2, MoreVertical, Trash2, Filter, Compass, Shuffle, Star, Heart } from 'lucide-react';
+import { Search, Home, Play, Info, ChevronLeft, ChevronRight, X, Maximize2, Minimize2, PanelRight, Settings2, MoreVertical, Trash2, Filter, Compass, Shuffle, Star, Heart } from 'lucide-react';
 import { AnilistSource } from './extensions/AnilistSource';
 import HorizontalScrollList from './components/common/HorizontalScrollList';
 import { AnimeLibHiLive } from './lib/anime-lib';
@@ -70,6 +70,9 @@ function App() {
     const [hasNextPage, setHasNextPage] = useState(true); // Simplified: assume next unless empty result
     const [totalPages, setTotalPages] = useState(1);
     const [activeHistoryMenu, setActiveHistoryMenu] = useState(null); // ID of history item with open menu
+
+    // Cache for Home Data (Page 1) to prevent refresh
+    const homeCache = useRef({ results: [], trending: [], timestamp: 0 });
 
     // UI State
     const [selectedAnime, setSelectedAnime] = useState(null);
@@ -223,6 +226,20 @@ function App() {
                     // Removed legacy state: setFeaturedAnime(null);
                 } else {
                     // Default / Home View
+
+                    // Check Cache for Page 1 ("Home")
+                    const isDefaultHome = Object.keys(filters).length === 0 && !searchQuery && page === 1 && contentFilter !== 'NSFW'; // NSFW might need separate cache, but for now assuming main home
+
+                    if (isDefaultHome && homeCache.current.results.length > 0 && (Date.now() - homeCache.current.timestamp < 300000)) { // 5 min cache
+                        // Use Cache
+                        setAnimeList(homeCache.current.results);
+                        setTrendingList(homeCache.current.trending);
+                        setHasNextPage(true);
+                        setTotalPages(100); // Dummy or stored?
+                        setIsLoading(false);
+                        return;
+                    }
+
                     // Apply Content Filter to Home (Trending & Popular)
                     const homeFilters = {};
                     if (contentFilter === 'SAFE') {
@@ -247,6 +264,15 @@ function App() {
 
                     setTrendingList(trendingData.results);
                     setFeaturedIndex(0); // Reset banner to start when content changes
+
+                    // Update Cache if this was the default home view
+                    if (isDefaultHome) {
+                        homeCache.current = {
+                            results: catalogData.results,
+                            trending: trendingData.results,
+                            timestamp: Date.now()
+                        };
+                    }
                 }
             } catch (err) {
                 console.error("Error loading content:", err);
@@ -274,13 +300,79 @@ function App() {
         setToast({ message, type });
     };
 
-    const addToHistory = (anime) => {
+    // --- History & Progress Logic ---
+    const addToHistory = (anime, episode = null, progress = 0, duration = 0) => {
+        console.log("addToHistory called for:", anime?.title, "Ep:", episode); // DEBUG log
+        if (!anime || !anime.id) {
+            console.error("Invalid anime object passed to addToHistory", anime);
+            return;
+        }
+
         setWatchHistory(prev => {
-            const newHistory = [anime, ...prev.filter(i => i.id !== anime.id)].slice(0, 50);
+            const existing = prev.find(i => i.id === anime.id);
+            const newItem = {
+                ...anime,
+                lastEpisode: episode || (existing ? existing.lastEpisode : 1),
+                progress: progress,
+                duration: duration,
+                lastWatchedAt: Date.now()
+            };
+
+            // Filter out invalid items just in case
+            const validHistory = prev.filter(i => i && i.id && i.id !== anime.id);
+
+            const newHistory = [newItem, ...validHistory].slice(0, 50);
+            console.log("Saving new history:", newHistory); // DEBUG log
             localStorage.setItem('mugen_watch_history', JSON.stringify(newHistory));
             return newHistory;
         });
     };
+
+    const handleProgress = (currentTime, duration) => {
+        // Throttle updates? For now, we update state every few seconds or on significant change?
+        // Actually, updating state on every frame is bad.
+        // We should debounce this or only save on unmount/pause?
+        // Simple approach: Use a ref for current session progress and save to DB/Local periodically.
+        // For simplicity in this React state model without Refs complexity:
+        // We'll trust the user interaction updates mostly, but for "resume", we need periodic save.
+        // We will just update a Ref, and save to LocalStorage every 5 seconds or on Pause/End.
+    };
+
+    // Ref to track current playback for efficient updates
+    const playbackRef = useRef({ id: null, episode: null, progress: 0, duration: 0 });
+
+    const reportProgress = (currentTime, duration) => {
+        if (!playingAnime) return;
+
+        // Update Ref
+        playbackRef.current = {
+            id: selectedAnime?.id || playingAnime?.id, // Fallback
+            episode: selectedAnime?.episodes?.find(e => e.url === playingAnime.url)?.number || playingAnime.episodeNumber,
+            progress: currentTime,
+            duration: duration
+        };
+
+        // Persist to localStorage throttled (e.g. every 5 seconds)
+        const now = Date.now();
+        if (now - lastSaveTime.current > 5000) {
+            saveProgress();
+            lastSaveTime.current = now;
+        }
+    };
+
+    const lastSaveTime = useRef(0);
+    const saveProgress = () => {
+        const current = playbackRef.current;
+        if (!current.id) return;
+
+        // Find current anime object to save fully
+        // This is a bit tricky because 'playingAnime' might just be the stream dict.
+        // We rely on 'selectedAnime' being the context.
+        if (selectedAnime && selectedAnime.id === current.id) {
+            addToHistory(selectedAnime, current.episode, current.progress, current.duration);
+        }
+    };
+
 
     const removeFromHistory = (animeId) => {
         setWatchHistory(prev => {
@@ -344,11 +436,43 @@ function App() {
             setSelectedAnime(null);
             setIsPlayerMinimized(false);
             setIsSidebarVisible(true);
-            addToHistory(anime);
+            // --- 2. Resolve Episode ---
+            // If no episode provided (e.g. clicking "Watch Now" or History), try to find last watched
+            let targetEpisodeNumber = episodeNumber;
+            let initialTime = 0;
+
+            if (!targetEpisodeNumber) {
+                // Check History
+                const historyItem = watchHistory.find(i => i.id === anime.id);
+                if (historyItem) {
+                    targetEpisodeNumber = historyItem.lastEpisode;
+                    // Resume time only if it's correct episode
+                    // Actually, if we are auto-resuming, we probably want the time too.
+                    initialTime = historyItem.progress || 0;
+                } else {
+                    targetEpisodeNumber = 1;
+                }
+            } else {
+                // Explicit episode click.
+                // If we clicked the SAME episode as history, maybe we resume?
+                // Usually users want to restart if they click it explicitly, OR we ask.
+                // For seamlessness: If it's the saved episode, resume.
+                const historyItem = watchHistory.find(i => i.id === anime.id);
+                if (historyItem && historyItem.lastEpisode === targetEpisodeNumber) {
+                    initialTime = historyItem.progress || 0;
+                    // If progress is near end (> 95%), restart
+                    if (historyItem.duration && initialTime > historyItem.duration * 0.95) {
+                        initialTime = 0;
+                    }
+                }
+            }
+
+            // Record initial history entry immediately
+            addToHistory(anime, targetEpisodeNumber, initialTime, 0);
 
             // Calculate Pagination Page immediately if episode is provided
-            if (episodeNumber) {
-                const newPage = Math.ceil(episodeNumber / 12);
+            if (targetEpisodeNumber) {
+                const newPage = Math.ceil(targetEpisodeNumber / 12);
                 setCurrentEpisodePage(newPage);
             } else {
                 setCurrentEpisodePage(1); // Default to page 1
@@ -417,14 +541,13 @@ function App() {
                     resolvedId = targetId;
 
                     // Determine current episode to play
-                    const targetEpNum = episodeNumber || 1;
-                    const ep = episodesList.find(e => e.number === targetEpNum);
+                    const ep = episodesList.find(e => e.number === targetEpisodeNumber);
 
                     if (ep) {
                         streamUrl = ep.url;
-                        showToast(`Playing Local: Ep ${targetEpNum}`, 'success');
+                        showToast(`Playing Local: Ep ${targetEpisodeNumber}`, 'success');
                     } else {
-                        showToast(`Episode ${targetEpNum} not found locally`, 'error');
+                        showToast(`Episode ${targetEpisodeNumber} not found locally`, 'error');
                     }
                 } else {
                     showToast(`Anime not found in Local Source`, 'error');
@@ -517,6 +640,8 @@ function App() {
     };
 
     const handleTabChange = (tab) => {
+        if (tab === activeTab) return; // Prevent redundant refresh
+
         setActiveTab(tab);
         if (tab === 'home') {
             setSearchQuery('');
@@ -948,20 +1073,44 @@ function App() {
                             <>
                                 {/* Hero Section */}
                                 {trendingList.length > 0 && !searchQuery && (() => {
-                                    const featured = trendingList[featuredIndex];
+                                    const bannerList = (trendingList || []).slice(0, 10);
+                                    if (bannerList.length === 0) return null;
+                                    const featured = bannerList[(featuredIndex % bannerList.length + bannerList.length) % bannerList.length]; // Double modulo for safe wrapping
                                     if (!featured) return null;
                                     return (
                                         <div className="relative h-[400px] sm:h-[500px] rounded-3xl overflow-hidden group mb-8">
                                             <img
-                                                key={featured.id} // Key change triggers animation if CSS configured
+                                                key={featured.id}
                                                 src={featured.bannerUrl}
                                                 alt={featured.title}
                                                 className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 animate-fade-in"
                                             />
                                             <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-gray-900/20 to-transparent">
+                                                {/* Top Right Navigation Buttons */}
+                                                <div className="absolute top-6 right-6 flex gap-2 z-20">
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setFeaturedIndex(prev => prev - 1);
+                                                        }}
+                                                        className="p-2 bg-black/30 hover:bg-black/60 backdrop-blur-sm rounded-full text-white border border-white/10 transition-colors"
+                                                    >
+                                                        <ChevronLeft size={20} />
+                                                    </button>
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setFeaturedIndex(prev => prev + 1);
+                                                        }}
+                                                        className="p-2 bg-black/30 hover:bg-black/60 backdrop-blur-sm rounded-full text-white border border-white/10 transition-colors"
+                                                    >
+                                                        <ChevronRight size={20} />
+                                                    </button>
+                                                </div>
+
                                                 <div className="absolute bottom-0 left-0 p-8 sm:p-12 w-full sm:w-2/3 space-y-4 animate-slide-up">
                                                     <span className="px-3 py-1 bg-red-600 text-white text-xs font-bold rounded-full uppercase tracking-wider">
-                                                        Trending #{featuredIndex + 1}
+                                                        Trending #{((featuredIndex % bannerList.length + bannerList.length) % bannerList.length) + 1}
                                                     </span>
                                                     <h1 className="text-4xl sm:text-6xl font-black text-white leading-tight">
                                                         {sanitize(featured.title)}
@@ -986,12 +1135,19 @@ function App() {
                                                     </div>
                                                 </div>
 
-                                                {/* Carousel Indicators */}
-                                                <div className="absolute bottom-8 right-8 flex gap-2">
-                                                    {trendingList.slice(0, 5).map((_, idx) => (
-                                                        <div
+                                                {/* Bottom Indicators (Dots) */}
+                                                <div className="absolute bottom-8 right-8 flex gap-2 z-20">
+                                                    {bannerList.map((_, idx) => (
+                                                        <button
                                                             key={idx}
-                                                            className={`h-1.5 rounded-full transition-all duration-300 ${idx === featuredIndex ? 'w-8 bg-red-600' : 'w-2 bg-white/30'}`}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setFeaturedIndex(idx);
+                                                            }}
+                                                            className={`h-2 rounded-full transition-all duration-300 ${idx === ((featuredIndex % bannerList.length + bannerList.length) % bannerList.length)
+                                                                ? 'w-6 bg-red-600'
+                                                                : 'w-2 bg-white/30 hover:bg-white/50'
+                                                                }`}
                                                         />
                                                     ))}
                                                 </div>
@@ -1001,73 +1157,50 @@ function App() {
                                 })()}
 
                                 {/* Scrollable Lists */}
-                                <HorizontalScrollList
-                                    title="Continue Watching"
-                                    icon={Play}
-                                    items={watchHistory}
-                                    onItemClick={(anime) => setSelectedAnime(anime)}
-                                    renderItem={(anime) => (
-                                        <div className="min-w-[200px] w-[200px] flex-shrink-0 cursor-pointer group relative">
-                                            <div
-                                                className="aspect-[2/3] rounded-xl overflow-hidden mb-2 relative"
-                                                onClick={() => setSelectedAnime(anime)}
-                                            >
-                                                <img
-                                                    src={anime.coverUrl || anime.image}
-                                                    alt={anime.title}
-                                                    className="w-full h-full object-cover pointer-events-none group-hover:scale-105 transition-transform duration-300"
-                                                />
-                                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                                    <Play className="w-10 h-10 text-white fill-white" />
-                                                </div>
-                                                <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-800">
-                                                    <div className="h-full bg-red-600 w-1/2"></div>
-                                                </div>
-                                            </div>
-                                            <div className="flex justify-between items-start">
-                                                <div className="flex-1 min-w-0 pr-2">
-                                                    <h3 className="text-sm font-medium text-white truncate">{anime.title.romaji || anime.title}</h3>
-                                                    <p className="text-xs text-gray-500">{anime.episodes ? `${anime.episodes} Episodes` : 'TV Series'}</p>
-                                                </div>
-                                                <div className="relative">
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            setActiveHistoryMenu(activeHistoryMenu === anime.id ? null : anime.id);
-                                                        }}
-                                                        className="p-1 hover:bg-gray-800 rounded-full text-gray-400 hover:text-white transition-colors"
-                                                    >
-                                                        <MoreVertical className="w-4 h-4" />
-                                                    </button>
+                                {/* DEBUG: History Count
+                                <div className="text-red-500 font-bold p-4 border border-red-500 bg-black/50">
+                                    Debug: History Length = {watchHistory.length}
+                                </div> */}
+                                {watchHistory.length > 0 && (
+                                    <HorizontalScrollList
+                                        title="Continue Watching"
+                                        items={watchHistory.filter(i => i && i.id)}
+                                        onItemClick={(anime) => handlePlay(anime)}
+                                        renderItem={(anime) => (
+                                            <div className="min-w-[200px] w-[200px] flex-shrink-0 cursor-pointer group relative">
+                                                <div className="aspect-video rounded-xl overflow-hidden mb-2 relative bg-gray-900 border border-white/10">
+                                                    <img
+                                                        src={anime.bannerUrl || anime.coverUrl}
+                                                        alt={anime.title}
+                                                        className="w-full h-full object-cover pointer-events-none group-hover:scale-105 transition-transform duration-300 opacity-80 group-hover:opacity-100"
+                                                    />
+                                                    <div className="absolute inset-0 flex items-center justify-center">
+                                                        <div className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center group-hover:bg-red-600 transition-colors">
+                                                            <Play className="w-5 h-5 text-white fill-current ml-0.5" />
+                                                        </div>
+                                                    </div>
 
-                                                    {activeHistoryMenu === anime.id && (
-                                                        <>
+                                                    {/* Progress Bar */}
+                                                    {anime.duration > 0 && (
+                                                        <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/20">
                                                             <div
-                                                                className="fixed inset-0 z-10 cursor-default"
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    setActiveHistoryMenu(null);
-                                                                }}
+                                                                className="h-full bg-red-600"
+                                                                style={{ width: `${Math.min(100, (anime.progress / anime.duration) * 100)}%` }}
                                                             />
-                                                            <div className="absolute right-0 top-full mt-1 bg-gray-900 border border-gray-800 rounded-lg shadow-xl z-20 py-1 min-w-[140px]">
-                                                                <button
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        removeFromHistory(anime.id);
-                                                                    }}
-                                                                    className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-gray-800 flex items-center gap-2"
-                                                                >
-                                                                    <Trash2 className="w-4 h-4" />
-                                                                    Remove
-                                                                </button>
-                                                            </div>
-                                                        </>
+                                                        </div>
                                                     )}
+
+                                                    {/* Episode Badge Overlay */}
+                                                    <div className="absolute top-2 left-2 px-2 py-0.5 rounded bg-black/60 backdrop-blur text-xs font-bold text-white">
+                                                        Ep {anime.lastEpisode || 1}
+                                                    </div>
                                                 </div>
+                                                <h3 className="text-sm font-medium text-white truncate">{anime.title.english || anime.title.romaji || anime.title}</h3>
+                                                <p className="text-xs text-gray-400">Episode {anime.lastEpisode}</p>
                                             </div>
-                                        </div>
-                                    )}
-                                />
+                                        )}
+                                    />
+                                )}
 
                                 <HorizontalScrollList
                                     title="Trending"
@@ -1223,13 +1356,20 @@ function App() {
                                         )}
                                     </div>
                                     <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6">
-                                        {animeList.map(anime => (
-                                            <AnimeCard
-                                                key={anime.id}
-                                                anime={{ ...anime, title: sanitize(anime.title || anime.name) }}
-                                                onClick={setSelectedAnime}
-                                            />
-                                        ))}
+                                        {animeList.map(anime => {
+                                            const historyItem = watchHistory.find(h => h.id === anime.id);
+                                            return (
+                                                <AnimeCard
+                                                    key={anime.id}
+                                                    anime={{
+                                                        ...anime,
+                                                        title: sanitize(anime.title || anime.name),
+                                                        lastEpisode: historyItem ? historyItem.lastEpisode : null
+                                                    }}
+                                                    onClick={setSelectedAnime}
+                                                />
+                                            );
+                                        })}
                                     </div>
 
                                     {/* Pagination Controls */}
@@ -1366,6 +1506,11 @@ function App() {
                                         scale={videoScale}
                                         xOffset={videoXOffset}
                                         yOffset={videoYOffset}
+                                        initialTime={playingAnime.initialTime}
+                                        onProgress={reportProgress}
+                                        onEnded={() => {
+                                            saveProgress();
+                                        }}
                                         onToggleMinimize={() => setIsPlayerMinimized(true)}
                                         onClose={() => setPlayingAnime(null)}
                                     />

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { ExternalLink, RefreshCw, Settings, Check } from 'lucide-react';
 import Hls from 'hls.js';
 
-const VideoPlayer = ({ src, title, onEnded, scale = 1, xOffset = 0, yOffset = -60 }) => {
+const VideoPlayer = ({ src, title, onEnded, onProgress, initialTime = 0, scale = 1, xOffset = 0, yOffset = -60 }) => {
     const [loadError, setLoadError] = useState(false);
     const [key, setKey] = useState(0); // To force reload iframe/video
     const [playerType, setPlayerType] = useState('iframe'); // 'iframe', 'native', 'hls'
@@ -54,6 +54,12 @@ const VideoPlayer = ({ src, title, onEnded, scale = 1, xOffset = 0, yOffset = -6
                 }));
 
                 setQualities(levels);
+
+                // Seek to initial time if provided
+                if (initialTime > 0) {
+                    videoRef.current.currentTime = initialTime;
+                }
+
                 videoRef.current.play().catch(() => { });
             });
 
@@ -71,6 +77,9 @@ const VideoPlayer = ({ src, title, onEnded, scale = 1, xOffset = 0, yOffset = -6
             // Safari Native HLS
             videoRef.current.src = src;
             videoRef.current.addEventListener('loadedmetadata', () => {
+                if (initialTime > 0) {
+                    videoRef.current.currentTime = initialTime;
+                }
                 videoRef.current.play();
             });
             videoRef.current.onended = onEnded;
@@ -126,6 +135,7 @@ const VideoPlayer = ({ src, title, onEnded, scale = 1, xOffset = 0, yOffset = -6
                         playsInline
                         src={playerType === 'native' ? src : undefined}
                         onEnded={onEnded}
+                        onTimeUpdate={(e) => onProgress && onProgress(e.target.currentTime, e.target.duration)}
                         onError={() => setLoadError(true)}
                     />
 
@@ -188,7 +198,10 @@ const VideoPlayer = ({ src, title, onEnded, scale = 1, xOffset = 0, yOffset = -6
 
     return (
         <div className="space-y-4">
-            <div className="relative w-full aspect-video bg-black rounded-xl overflow-hidden shadow-lg border border-gray-800 group">
+            <div
+                className="relative w-full aspect-video bg-black rounded-xl overflow-hidden shadow-lg border border-gray-800 group"
+                onContextMenu={(e) => e.preventDefault()}
+            >
                 {renderPlayer()}
             </div>
 
