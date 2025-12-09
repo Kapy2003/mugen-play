@@ -56,7 +56,7 @@ export class AnilistSource extends Extension {
     async getTrending(filters = {}) {
         const variables = {
             page: 1,
-            perPage: 30, // Increased to fill larger grids
+            perPage: 100, // Increased to show more items per page
             sort: 'TRENDING_DESC',
             ...filters
         };
@@ -127,7 +127,7 @@ export class AnilistSource extends Extension {
         // Construct variables
         const variables = {
             page: 1, // Default
-            perPage: 30,
+            perPage: 60,
             search: query || undefined,
             sort: filters.sort || 'POPULARITY_DESC',
             ...filters

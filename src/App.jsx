@@ -10,6 +10,7 @@ import Toast from './components/common/Toast';
 import { ANIME_CATALOG, INITIAL_EXTENSIONS, VIDEO_SOURCES, ANIME_SLUG_OVERRIDES } from './data/constants';
 import { Search, Home, Play, Info, ChevronLeft, ChevronRight, X, Maximize2, Minimize2, PanelRight, Settings2, MoreVertical, Trash2, Filter, Compass, Shuffle, Star, Heart } from 'lucide-react';
 import { AnilistSource } from './extensions/AnilistSource';
+import HeroCarousel from './components/home/HeroCarousel';
 import HorizontalScrollList from './components/common/HorizontalScrollList';
 import { AnimeLibHiLive } from './lib/anime-lib';
 import LocalSource from './lib/LocalSource';
@@ -818,10 +819,10 @@ function App() {
 
                             {/* Advanced Filters Section */}
                             {showSourceMenu && (
-                                <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 animate-fade-in">
+                                <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 flex flex-wrap gap-4 animate-fade-in items-end">
 
                                     {/* Content Rating */}
-                                    <div className="space-y-1">
+                                    <div className="space-y-1 flex-1 min-w-[140px]">
                                         <label className="text-xs font-bold text-gray-500 uppercase">Content</label>
                                         <select
                                             value={contentFilter}
@@ -835,7 +836,7 @@ function App() {
                                     </div>
 
                                     {/* Sort */}
-                                    <div className="space-y-1">
+                                    <div className="space-y-1 flex-1 min-w-[140px]">
                                         <label className="text-xs font-bold text-gray-500 uppercase">Sort</label>
                                         <select
                                             value={filters.sort || 'POPULARITY_DESC'}
@@ -849,7 +850,7 @@ function App() {
                                         </select>
                                     </div>
                                     {/* Genres */}
-                                    <div className="space-y-1">
+                                    <div className="space-y-1 flex-1 min-w-[140px]">
                                         <label className="text-xs font-bold text-gray-500 uppercase">Genres</label>
                                         <select
                                             value={filters.genre || ''}
@@ -864,7 +865,7 @@ function App() {
                                     </div>
 
                                     {/* Year */}
-                                    <div className="space-y-1">
+                                    <div className="space-y-1 flex-1 min-w-[100px]">
                                         <label className="text-xs font-bold text-gray-500 uppercase">Year</label>
                                         <select
                                             value={filters.year || ''}
@@ -879,7 +880,7 @@ function App() {
                                     </div>
 
                                     {/* Season */}
-                                    <div className="space-y-1">
+                                    <div className="space-y-1 flex-1 min-w-[100px]">
                                         <label className="text-xs font-bold text-gray-500 uppercase">Season</label>
                                         <select
                                             value={filters.season || ''}
@@ -895,7 +896,7 @@ function App() {
                                     </div>
 
                                     {/* Format */}
-                                    <div className="space-y-1">
+                                    <div className="space-y-1 flex-1 min-w-[100px]">
                                         <label className="text-xs font-bold text-gray-500 uppercase">Format</label>
                                         <select
                                             value={filters.format || ''}
@@ -913,7 +914,7 @@ function App() {
                                     </div>
 
                                     {/* Status */}
-                                    <div className="space-y-1">
+                                    <div className="space-y-1 flex-1 min-w-[120px]">
                                         <label className="text-xs font-bold text-gray-500 uppercase">Status</label>
                                         <select
                                             value={filters.status || ''}
@@ -932,8 +933,8 @@ function App() {
                             )}
                         </div>
 
-                        {/* Grid */}
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-6">
+                        {/* Grid - Auto-fit ensures items stretch to fill the row if there are few */}
+                        <div className="grid gap-4 sm:gap-6" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
                             {animeList.map(anime => (
                                 <AnimeCard
                                     key={anime.id}
@@ -1072,89 +1073,11 @@ function App() {
                         {!isLoading && (
                             <>
                                 {/* Hero Section */}
-                                {trendingList.length > 0 && !searchQuery && (() => {
-                                    const bannerList = (trendingList || []).slice(0, 10);
-                                    if (bannerList.length === 0) return null;
-                                    const featured = bannerList[(featuredIndex % bannerList.length + bannerList.length) % bannerList.length]; // Double modulo for safe wrapping
-                                    if (!featured) return null;
-                                    return (
-                                        <div className="relative h-[400px] sm:h-[500px] rounded-3xl overflow-hidden group mb-8">
-                                            <img
-                                                key={featured.id}
-                                                src={featured.bannerUrl}
-                                                alt={featured.title}
-                                                className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 animate-fade-in"
-                                            />
-                                            <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-gray-900/20 to-transparent">
-                                                {/* Top Right Navigation Buttons */}
-                                                <div className="absolute top-6 right-6 flex gap-2 z-20">
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            setFeaturedIndex(prev => prev - 1);
-                                                        }}
-                                                        className="p-2 bg-black/30 hover:bg-black/60 backdrop-blur-sm rounded-full text-white border border-white/10 transition-colors"
-                                                    >
-                                                        <ChevronLeft size={20} />
-                                                    </button>
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            setFeaturedIndex(prev => prev + 1);
-                                                        }}
-                                                        className="p-2 bg-black/30 hover:bg-black/60 backdrop-blur-sm rounded-full text-white border border-white/10 transition-colors"
-                                                    >
-                                                        <ChevronRight size={20} />
-                                                    </button>
-                                                </div>
-
-                                                <div className="absolute bottom-0 left-0 p-8 sm:p-12 w-full sm:w-2/3 space-y-4 animate-slide-up">
-                                                    <span className="px-3 py-1 bg-red-600 text-white text-xs font-bold rounded-full uppercase tracking-wider">
-                                                        Trending #{((featuredIndex % bannerList.length + bannerList.length) % bannerList.length) + 1}
-                                                    </span>
-                                                    <h1 className="text-4xl sm:text-6xl font-black text-white leading-tight">
-                                                        {sanitize(featured.title)}
-                                                    </h1>
-                                                    <p className="text-gray-200 line-clamp-2 text-lg">
-                                                        {sanitize(featured.synopsis)}
-                                                    </p>
-                                                    <div className="flex gap-4 pt-4">
-                                                        <button
-                                                            onClick={() => handlePlay(featured)}
-                                                            className="px-8 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl flex items-center gap-2 transition-transform hover:scale-105"
-                                                        >
-                                                            <Play className="w-5 h-5 fill-current" />
-                                                            Watch Now
-                                                        </button>
-                                                        <button
-                                                            onClick={() => setSelectedAnime(featured)}
-                                                            className="px-8 py-3 bg-white/10 hover:bg-white/20 backdrop-blur-md text-white font-bold rounded-xl transition-colors border border-white/10"
-                                                        >
-                                                            More Info
-                                                        </button>
-                                                    </div>
-                                                </div>
-
-                                                {/* Bottom Indicators (Dots) */}
-                                                <div className="absolute bottom-8 right-8 flex gap-2 z-20">
-                                                    {bannerList.map((_, idx) => (
-                                                        <button
-                                                            key={idx}
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                setFeaturedIndex(idx);
-                                                            }}
-                                                            className={`h-2 rounded-full transition-all duration-300 ${idx === ((featuredIndex % bannerList.length + bannerList.length) % bannerList.length)
-                                                                ? 'w-6 bg-red-600'
-                                                                : 'w-2 bg-white/30 hover:bg-white/50'
-                                                                }`}
-                                                        />
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    );
-                                })()}
+                                <HeroCarousel
+                                    items={(trendingList || []).slice(0, 10)}
+                                    onPlay={handlePlay}
+                                    onInfo={setSelectedAnime}
+                                />
 
                                 {/* Scrollable Lists */}
                                 {/* DEBUG: History Count
@@ -1269,11 +1192,44 @@ function App() {
                                         </div>
 
                                         {/* Advanced Filter Bar */}
+                                        {/* Advanced Filter Bar */}
                                         {showSourceMenu && (
-                                            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 animate-fade-in">
+                                            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 flex flex-wrap gap-4 animate-fade-in items-end">
+
+                                                {/* Content */}
+                                                <div className="space-y-1 flex-1 min-w-[140px]">
+                                                    <label className="text-xs font-bold text-gray-500 uppercase">Content</label>
+                                                    <select
+                                                        value={contentFilter}
+                                                        onChange={(e) => cycleContentFilter(e.target.value)}
+                                                        className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-500"
+                                                    >
+                                                        <option value="ALL">All (Safe + NSFW)</option>
+                                                        <option value="SAFE">Safe (No NSFW)</option>
+                                                        <option value="NSFW">NSFW Only</option>
+                                                    </select>
+                                                </div>
+
+                                                {/* Sort (Was removed in previous view, adding logic if needed or assuming defaults) - Re-adding Sort based on screenshot request */}
+                                                <div className="space-y-1 flex-1 min-w-[140px]">
+                                                    <label className="text-xs font-bold text-gray-500 uppercase">Sort</label>
+                                                    <select
+                                                        value={filters.sort || 'POPULARITY_DESC'}
+                                                        onChange={(e) => handleFilterChange('sort', e.target.value)}
+                                                        className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-500"
+                                                    >
+                                                        <option value="POPULARITY_DESC">Most Popular</option>
+                                                        <option value="TRENDING_DESC">Trending</option>
+                                                        <option value="SCORE_DESC">Highest Rated</option>
+                                                        <option value="FAVOURITES_DESC">Most Favorites</option>
+                                                        <option value="START_DATE_DESC">Newest</option>
+                                                        <option value="START_DATE">Oldest</option>
+                                                        <option value="TITLE_ENGLISH">Title (A-Z)</option>
+                                                    </select>
+                                                </div>
 
                                                 {/* Genres */}
-                                                <div className="space-y-1">
+                                                <div className="space-y-1 flex-1 min-w-[140px]">
                                                     <label className="text-xs font-bold text-gray-500 uppercase">Genres</label>
                                                     <select
                                                         value={filters.genre || ''}
@@ -1288,7 +1244,7 @@ function App() {
                                                 </div>
 
                                                 {/* Year */}
-                                                <div className="space-y-1">
+                                                <div className="space-y-1 flex-1 min-w-[100px]">
                                                     <label className="text-xs font-bold text-gray-500 uppercase">Year</label>
                                                     <select
                                                         value={filters.year || ''}
@@ -1303,7 +1259,7 @@ function App() {
                                                 </div>
 
                                                 {/* Season */}
-                                                <div className="space-y-1">
+                                                <div className="space-y-1 flex-1 min-w-[100px]">
                                                     <label className="text-xs font-bold text-gray-500 uppercase">Season</label>
                                                     <select
                                                         value={filters.season || ''}
@@ -1319,7 +1275,7 @@ function App() {
                                                 </div>
 
                                                 {/* Format */}
-                                                <div className="space-y-1">
+                                                <div className="space-y-1 flex-1 min-w-[100px]">
                                                     <label className="text-xs font-bold text-gray-500 uppercase">Format</label>
                                                     <select
                                                         value={filters.format || ''}
@@ -1337,7 +1293,7 @@ function App() {
                                                 </div>
 
                                                 {/* Status */}
-                                                <div className="space-y-1">
+                                                <div className="space-y-1 flex-1 min-w-[120px]">
                                                     <label className="text-xs font-bold text-gray-500 uppercase">Status</label>
                                                     <select
                                                         value={filters.status || ''}
@@ -1355,7 +1311,7 @@ function App() {
                                             </div>
                                         )}
                                     </div>
-                                    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6">
+                                    <div className="grid gap-4 sm:gap-6" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
                                         {animeList.map(anime => {
                                             const historyItem = watchHistory.find(h => h.id === anime.id);
                                             return (
