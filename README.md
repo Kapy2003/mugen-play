@@ -1,37 +1,94 @@
-# Mugen Play
-
 <div align="center">
-  <!-- <img src="https://anilist.co/img/icons/android-chrome-512x512.png" alt="Mugen Play Logo" width="100" height="100" /> -->
-  <h1>Mugen Play</h1>
-  <p><strong>The Ultimate Extension-Based Anime Platform</strong></p>
+  <img src="https://anilist.co/img/icons/android-chrome-512x512.png" alt="Mugen Play Logo" width="120" height="120" />
+
+  # MUGEN PLAY
+  
+  **The Ultimate Extension-Based Anime Platform**
+
+  <p>
+    <a href="https://github.com/Kapy2003/mugen-play/graphs/contributors">
+      <img src="https://img.shields.io/github/contributors/Kapy2003/mugen-play?style=for-the-badge&color=blue" alt="Contributors" />
+    </a>
+    <a href="https://github.com/Kapy2003/mugen-play/stargazers">
+      <img src="https://img.shields.io/github/stars/Kapy2003/mugen-play?style=for-the-badge&color=yellow" alt="Stars" />
+    </a>
+    <a href="https://github.com/Kapy2003/mugen-play/issues">
+      <img src="https://img.shields.io/github/issues/Kapy2003/mugen-play?style=for-the-badge&color=red" alt="Issues" />
+    </a>
+    <a href="https://github.com/Kapy2003/mugen-play/blob/main/LICENSE">
+      <img src="https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge" alt="License" />
+    </a>
+  </p>
+
+  <h3>
+    <a href="#-features">Features</a> • 
+    <a href="#-getting-started">Installation</a> • 
+    <a href="#-extension-system">Extensions</a> • 
+    <a href="#-tech-stack">Tech Stack</a>
+  </h3>
 </div>
 
-Mugen Play is a modern, privacy-focused, and beautiful web application for discovering and tracking anime. It leverages a powerful **Extension System** to let users define their own content sources while syncing seamlessly with **AniList**.
+---
+
+## 📖 About
+
+**Mugen Play** is a modern, privacy-focused web application for discovering and tracking anime. It leverages a powerful **Extension System** to decouple content providers from the UI, syncing seamlessly with **AniList**.
+
+Built with **React 18** and **TailwindCSS**, it offers a "Netflix-like" cinematic experience without the ads, clutter, or tracking found on traditional streaming sites.
+
+## 📸 Preview
+
+<div align="center">
+  <img src="https://via.placeholder.com/800x450.png?text=Add+Your+App+Screenshot+Here" alt="Preview Placeholder" width="800" />
+</div>
+
+---
 
 ## ✨ Features
 
-- **🎨 Modern Data-Rich UI**: built with TailwindCSS for a premium "Netflix-like" experience.
-- **🔌 Extension Architecture**: Decoupled content providers. Comes with built-in AniList metadata provider.
-- **👤 AniList Integration**: 
-  - Login with your AniList account.
-  - Sync your Watch History (Coming Soon).
-  - Browse your Personalized Trending list.
-- **🚫 Ad-Free Experience**: Designed for clean consumption locally.
-- **📱 Responsive**: Fully optimized for Desktop, Tablet, and Mobile.
-- **🍿 Smart Player**: Auto-playing trailers with delayed start, minimize/maximize player modes.
+### 🎨 User Experience
+- **Cinematic UI**: Dark-mode first, built with TailwindCSS for a premium feel.
+- **Smart Player**: Auto-playing trailers, skip intro support, and theater mode.
+- **Responsive**: Fully optimized for Desktop, Tablet, and Mobile devices.
+
+### 🔌 Extension Architecture
+- **Decoupled Sources**: The app does not host content. Users install "Source Extensions" to define where content comes from.
+- **Community Store**: Browse and install extensions for various providers.
+- **Auto-Search**: Automatically scrapes active extensions to find the best stream for your anime.
+
+### 👤 AniList Integration
+- **OAuth Login**: Secure login with your AniList account.
+- **Library Sync**: View your "Watching", "Planning", and "Completed" lists.
+- **Metadata**: Rich data (descriptions, banners, scores) provided directly by AniList API.
+
+---
 
 ## 🛠️ Tech Stack
 
-- **Framework**: React 18 (Vite)
-- **Styling**: TailwindCSS + Lucide Icons
-- **State Management**: React Hooks + LocalStorage Persistence
-- **API**: GraphQL (AniList)
+| Domain | Technology |
+| :--- | :--- |
+| **Core** | [React 18](https://reactjs.org/) (Vite) |
+| **Language** | [JavaScript](https://developer.mozilla.org/en-US/docs/Web/JavaScript) (ES6+) |
+| **Styling** | [TailwindCSS](https://tailwindcss.com/) + PostCSS |
+| **Icons** | [Lucide React](https://lucide.dev/) |
+| **API** | [GraphQL](https://graphql.org/) (AniList) |
+| **Linting** | ESLint |
+
+---
 
 ## 🚀 Getting Started
 
+Follow these steps to set up the project locally.
+
+### Prerequisites
+* **Node.js** (v16 or higher)
+* **npm** (comes with Node.js)
+
+### Installation
+
 1.  **Clone the repository**
     ```bash
-    git clone https://github.com/yourusername/mugen-play.git
+    git clone [https://github.com/Kapy2003/mugen-play.git](https://github.com/Kapy2003/mugen-play.git)
     cd mugen-play
     ```
 
@@ -40,28 +97,46 @@ Mugen Play is a modern, privacy-focused, and beautiful web application for disco
     npm install
     ```
 
-3.  **Run Development Server**
+3.  **Configure Environment**
+    * The app uses a default `CLIENT_ID` for AniList.
+    * To use your own, create a [New Client on AniList](https://anilist.co/settings/developer) and update `src/App.jsx`.
+
+4.  **Run Development Server**
     ```bash
     npm run dev
     ```
+    > Open [http://localhost:5173](http://localhost:5173) in your browser.
 
-4.  **Build for Production**
+5.  **Build for Production**
     ```bash
     npm run build
     ```
 
-## ⚙️ Configuration
+---
 
-### AniList Authentication
-The app uses a public/dev Client ID by default. To use your own:
-1.  Go to [AniList Developer Settings](https://anilist.co/settings/developer).
-2.  Create a new Client.
-3.  Open `src/App.jsx`.
-4.  Replace the `CLIENT_ID` constant with your new ID.
+## 📂 Project Structure
 
-## 🧩 Extension System
+```text
+mugen-play/
+├── public/              # Static assets (favicons, manifest)
+├── src/
+│   ├── components/      # Reusable UI components
+│   ├── pages/           # Main route views (Home, Player, Search)
+│   ├── extensions/      # Extension definitions and logic
+│   ├── hooks/           # Custom React hooks
+│   ├── App.jsx          # Main application entry
+│   └── main.jsx         # DOM rendering
+├── eslint.config.js     # Linting configuration
+├── tailwind.config.js   # TailwindCSS configuration
+├── vite.config.js       # Vite bundler configuration
+└── package.json         # Dependencies and scripts
 
-Mugen Play uses a standardized `ExtensionSDK`.
-- **Source Extensions**: Provide metadata (e.g., AniList).
-- **Custom Extensions**: Can be added via the "Extensions" tab to provide video sources.
+## 🤝 Contributing
 
+We welcome contributions! Please see our [CONTRIBUTING.md](CONTRIBUTING.md) for details on how to set up the project, add new extensions, and submit pull requests.
+
+1.  Fork the Project
+2.  Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
+3.  Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
+4.  Push to the Branch (`git push origin feature/AmazingFeature`)
+5.  Open a Pull Request
