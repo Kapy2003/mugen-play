@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="https://anilist.co/img/icons/android-chrome-512x512.png" alt="Mugen Play Logo" width="120" height="120" />
+  <img src="" alt="Mugen Play Logo" width="120" height="120" />
 
   # MUGEN PLAY
   
@@ -130,6 +130,7 @@ mugen-play/
 ├── tailwind.config.js   # TailwindCSS configuration
 ├── vite.config.js       # Vite bundler configuration
 └── package.json         # Dependencies and scripts
+```
 
 ## 🤝 Contributing
 
