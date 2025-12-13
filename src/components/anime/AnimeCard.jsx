@@ -21,6 +21,12 @@ const AnimeCard = ({ anime, onClick }) => {
                     <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
                     <span className="text-xs text-white font-medium">{anime.rating}</span>
                 </div>
+                {/* Progress Badge */}
+                {anime.lastEpisode && (
+                    <div className="absolute top-2 left-2 bg-red-600/90 backdrop-blur-md px-2 py-1 rounded-md shadow-lg z-10">
+                        <span className="text-xs text-white font-bold">Ep {anime.lastEpisode}</span>
+                    </div>
+                )}
             </div>
 
             <div className="p-4">

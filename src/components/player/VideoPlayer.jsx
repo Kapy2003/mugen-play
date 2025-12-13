@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { ExternalLink, RefreshCw, Settings, Check } from 'lucide-react';
 import Hls from 'hls.js';
 
-const VideoPlayer = ({ src, title, onEnded }) => {
+const VideoPlayer = ({ src, title, onEnded, onProgress, initialTime = 0, scale = 1, xOffset = 0, yOffset = -60 }) => {
     const [loadError, setLoadError] = useState(false);
     const [key, setKey] = useState(0); // To force reload iframe/video
     const [playerType, setPlayerType] = useState('iframe'); // 'iframe', 'native', 'hls'
@@ -54,107 +54,121 @@ const VideoPlayer = ({ src, title, onEnded }) => {
                 }));
 
                 setQualities(levels);
+
+                // Seek to initial time if provided
+                if (initialTime > 0) {
+                    videoRef.current.currentTime = initialTime;
+                }
+
                 videoRef.current.play().catch(() => { });
             });
 
             hls.on(Hls.Events.ERROR, (event, data) => {
                 if (data.fatal) {
-                    console.error("HLS Error", data);
+                    console.error("HLS Fatal Error", data);
+                    // Try to recover or fallback
                     setLoadError(true);
                 }
             });
+            // End listener
+            videoRef.current.onended = onEnded;
+
         } else if (videoRef.current.canPlayType('application/vnd.apple.mpegurl')) {
+            // Safari Native HLS
             videoRef.current.src = src;
-            videoRef.current.play().catch(() => { });
+            videoRef.current.addEventListener('loadedmetadata', () => {
+                if (initialTime > 0) {
+                    videoRef.current.currentTime = initialTime;
+                }
+                videoRef.current.play();
+            });
+            videoRef.current.onended = onEnded;
         }
 
         return () => {
-            if (hlsRef.current) {
-                hlsRef.current.destroy();
-            }
+            if (hlsRef.current) hlsRef.current.destroy();
         };
     }, [src, playerType, key]);
 
-    const reload = () => {
-        setLoadError(false);
-        setKey(prev => prev + 1);
-    };
-
-    const changeQuality = (levelIndex) => {
+    // Quality Change Handler
+    const changeQuality = (qualityId) => {
+        setCurrentQuality(qualityId);
         if (hlsRef.current) {
-            hlsRef.current.currentLevel = levelIndex;
-            setCurrentQuality(levelIndex);
-            setShowQualityMenu(false);
+            hlsRef.current.currentLevel = qualityId;
         }
+        setShowQualityMenu(false);
     };
 
     const renderPlayer = () => {
         if (loadError) {
             return (
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-900 text-white gap-4 p-6 text-center">
-                    <p className="text-lg font-medium text-red-500">
-                        {playerType === 'iframe'
-                            ? 'Connection refused or blocked by provider.'
-                            : 'Video failed to load.'}
-                    </p>
-                    <p className="text-sm text-gray-400">
-                        {playerType === 'iframe'
-                            ? 'Some sites do not allow embedding.'
-                            : 'Stream might be offline or format unsupported.'}
-                    </p>
+                <div className="w-full h-full flex flex-col items-center justify-center bg-gray-900 text-gray-400 p-8 text-center">
+                    <p className="mb-4">Unable to load video stream.</p>
+                    <button
+                        onClick={() => setKey(k => k + 1)}
+                        className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors flex items-center gap-2"
+                    >
+                        <RefreshCw size={16} /> Retry
+                    </button>
+                    {playerType === 'iframe' && (
+                        <a
+                            href={src}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="mt-4 text-xs text-blue-400 hover:underline flex items-center gap-1"
+                        >
+                            Open Source <ExternalLink size={12} />
+                        </a>
+                    )}
                 </div>
             );
         }
 
-        if (playerType === 'hls' || playerType === 'native') {
+        if (playerType === 'native' || playerType === 'hls') {
             return (
-                <div className="relative w-full h-full group">
+                <div className="relative group w-full h-full">
                     <video
                         key={key}
                         ref={videoRef}
-                        className="absolute inset-0 w-full h-full bg-black"
+                        className="w-full h-full"
                         controls
                         playsInline
-                        onContextMenu={(e) => e.preventDefault()}
-                        onError={() => setLoadError(true)}
-                        onEnded={onEnded}
                         src={playerType === 'native' ? src : undefined}
+                        onEnded={onEnded}
+                        onTimeUpdate={(e) => onProgress && onProgress(e.target.currentTime, e.target.duration)}
+                        onError={() => setLoadError(true)}
                     />
 
-                    {/* Custom HLS Controls Overlay - Only show if we have qualities */}
+                    {/* Quality Selector (HLS only) */}
                     {playerType === 'hls' && qualities.length > 0 && (
-                        <div className="absolute top-4 right-4 z-50">
-                            <div className="relative">
-                                <button
-                                    onClick={() => setShowQualityMenu(!showQualityMenu)}
-                                    className="bg-black/60 hover:bg-black/80 text-white p-2 rounded-lg backdrop-blur-sm transition-colors border border-white/10"
-                                    title="Quality"
-                                >
-                                    <Settings className="w-5 h-5" />
-                                </button>
+                        <div className="absolute bottom-16 right-4 z-20">
+                            <button
+                                onClick={() => setShowQualityMenu(!showQualityMenu)}
+                                className="p-2 bg-black/60 hover:bg-black/80 text-white rounded-full backdrop-blur-sm transition-colors"
+                                title="Quality"
+                            >
+                                <Settings size={20} />
+                            </button>
 
-                                {showQualityMenu && (
-                                    <div className="absolute top-full right-0 mt-2 bg-gray-900 border border-gray-700 rounded-xl overflow-hidden shadow-xl min-w-[120px] py-1">
+                            {showQualityMenu && (
+                                <div className="absolute bottom-full right-0 mb-2 bg-black/90 rounded-lg overflow-hidden min-w-[120px] shadow-xl border border-white/10">
+                                    <button
+                                        onClick={() => changeQuality(-1)}
+                                        className={`w-full px-4 py-2 text-left text-sm hover:bg-white/10 flex items-center justify-between ${currentQuality === -1 ? 'text-red-400' : 'text-white'}`}
+                                    >
+                                        Auto {currentQuality === -1 && <Check size={14} />}
+                                    </button>
+                                    {qualities.map(q => (
                                         <button
-                                            onClick={() => changeQuality(-1)}
-                                            className="w-full text-left px-4 py-2 text-sm text-white hover:bg-gray-800 flex items-center justify-between"
+                                            key={q.id}
+                                            onClick={() => changeQuality(q.id)}
+                                            className={`w-full px-4 py-2 text-left text-sm hover:bg-white/10 flex items-center justify-between ${currentQuality === q.id ? 'text-red-400' : 'text-white'}`}
                                         >
-                                            <span>Auto</span>
-                                            {currentQuality === -1 && <Check className="w-3 h-3 text-red-500" />}
+                                            {q.label} {currentQuality === q.id && <Check size={14} />}
                                         </button>
-                                        {qualities.map(q => (
-                                            <button
-                                                key={q.id}
-                                                onClick={() => changeQuality(q.id)}
-                                                className="w-full text-left px-4 py-2 text-sm text-white hover:bg-gray-800 flex items-center justify-between"
-                                            >
-                                                <span>{q.label}</span>
-                                                {currentQuality === q.id && <Check className="w-3 h-3 text-red-500" />}
-                                            </button>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
@@ -165,11 +179,18 @@ const VideoPlayer = ({ src, title, onEnded }) => {
         return (
             <iframe
                 key={key}
-                className="absolute inset-0 w-full h-full"
+                className="absolute inset-0 w-full h-full transition-transform duration-300 origin-center"
+                style={{
+                    marginTop: `${yOffset}px`,
+                    height: `calc(100% + ${Math.abs(yOffset)}px)`,
+                    transform: `scale(${scale}) translateX(${xOffset}%)`
+                }}
+                scrolling="no"
                 src={src}
                 title={title}
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                 allowFullScreen
+                referrerPolicy="no-referrer"
                 onError={() => setLoadError(true)}
             />
         );
@@ -177,44 +198,14 @@ const VideoPlayer = ({ src, title, onEnded }) => {
 
     return (
         <div className="space-y-4">
-            <div className="relative aspect-video bg-black rounded-xl overflow-hidden shadow-lg border border-gray-800 group">
+            <div
+                className="relative w-full aspect-video bg-black rounded-xl overflow-hidden shadow-lg border border-gray-800 group"
+                onContextMenu={(e) => e.preventDefault()}
+            >
                 {renderPlayer()}
             </div>
 
-            <div className="flex items-center justify-between p-4 bg-gray-900 rounded-xl border border-gray-800">
-                <div className="flex items-center gap-2">
-                    <div className={`w-2 h-2 rounded-full ${loadError ? 'bg-red-500' : 'bg-green-500 animate-pulse'}`}></div>
-                    <span className="text-sm text-gray-400">
-                        Source: <span className="text-white font-medium">{new URL(src).hostname}</span>
-                        <span className="ml-2 text-xs bg-gray-800 px-2 py-0.5 rounded uppercase">{playerType}</span>
-                        {playerType === 'hls' && currentQuality !== -1 && (
-                            <span className="ml-2 text-xs bg-red-900/50 text-red-200 px-2 py-0.5 rounded border border-red-500/20">
-                                {qualities.find(q => q.id === currentQuality)?.label}
-                            </span>
-                        )}
-                    </span>
-                </div>
-
-                <div className="flex gap-3">
-                    <button
-                        onClick={reload}
-                        className="flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg text-sm font-medium transition-colors"
-                    >
-                        <RefreshCw className="w-4 h-4" />
-                        Reload
-                    </button>
-                    <a
-                        href={src}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors"
-                    >
-                        <ExternalLink className="w-4 h-4" />
-                        Open External
-                    </a>
-                </div>
-            </div>
-
+            {/* External Warning (Only show if not full screen or if desired) */}
             {playerType === 'iframe' && (
                 <div className="bg-yellow-500/10 border border-yellow-500/20 p-4 rounded-xl flex gap-3">
                     <div className="text-yellow-500">
@@ -224,7 +215,7 @@ const VideoPlayer = ({ src, title, onEnded }) => {
                         <p className="text-yellow-200 font-bold mb-1">External Source Warning</p>
                         <p className="text-yellow-500/80">
                             You are viewing content from an external provider using an embedded view.
-                            If the video doesn&apos;t load, please use the <strong>Open External</strong> button above.
+                            If the video doesn&apos;t load, please try reloading or checking the source.
                         </p>
                     </div>
                 </div>

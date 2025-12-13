@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 const HorizontalScrollList = ({ title, icon: Icon, items, onItemClick, renderItem }) => {
@@ -68,18 +68,18 @@ const HorizontalScrollList = ({ title, icon: Icon, items, onItemClick, renderIte
 
             <div
                 ref={scrollRef}
-                className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide cursor-grab active:cursor-grabbing select-none"
+                className="flex gap-4 overflow-x-auto pb-24 -mb-20 scrollbar-hide cursor-grab active:cursor-grabbing select-none"
                 onMouseDown={handleMouseDown}
                 onMouseLeave={handleMouseLeave}
                 onMouseUp={handleMouseUp}
                 onMouseMove={handleMouseMove}
                 style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }} // Hide scrollbar for Firefox/IE
             >
-                {items.map((item, index) => (
+                {items.map((item) => (
                     <div
-                        key={item.id || index}
+                        key={item.id || item.slug}
                         className="flex-shrink-0"
-                        onClick={(e) => {
+                        onClick={() => {
                             // Prevent click if we were dragging
                             if (!isDragging) onItemClick(item);
                         }}
