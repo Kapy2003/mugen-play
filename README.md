@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="https://github.com/user-attachments/assets/09db937a-ac2f-4114-b611-114b9f6aecd8" />" alt="Mugen Play Logo" width="120" height="120" />
+  <img src="https://github.com/user-attachments/assets/09db937a-ac2f-4114-b611-114b9f6aecd8" alt="Mugen Play Logo" width="120" height="120" />
 
   # MUGEN PLAY
   
@@ -32,7 +32,7 @@
 
 ## 📖 About
 
-**Mugen Play** is a modern, privacy-focused web application for discovering and tracking anime. It leverages a powerful **Extension System** to decouple content providers from the UI, syncing seamlessly with **AniList**.
+**Mugen Play** is a modern, privacy-focused web application for discovering and tracking anime. It leverages a powerful **Extension System** to decouple content providers from the UI, syncing seamlessly with community-provided source extensions.
 
 Built with **React 18** and **TailwindCSS**, it offers a "Netflix-like" cinematic experience without the ads, clutter, or tracking found on traditional streaming sites.
 
@@ -59,7 +59,7 @@ Built with **React 18** and **TailwindCSS**, it offers a "Netflix-like" cinemati
 ### 👤 AniList Integration
 - **OAuth Login**: Secure login with your AniList account.
 - **Library Sync**: View your "Watching", "Planning", and "Completed" lists.
-- **Metadata**: Rich data (descriptions, banners, scores) provided directly by AniList API.
+- **Metadata**: Rich data (descriptions, banners, scores) provided directly by the AniList API.
 
 ---
 
@@ -88,26 +88,26 @@ Follow these steps to set up the project locally.
 
 1.  **Clone the repository**
     ```bash
-    git clone [https://github.com/Kapy2003/mugen-play.git](https://github.com/Kapy2003/mugen-play.git)
+    git clone https://github.com/Kapy2003/mugen-play.git
     cd mugen-play
     ```
 
-2.  **Install Dependencies**
+2.  **Install dependencies**
     ```bash
     npm install
     ```
 
-3.  **Configure Environment**
+3.  **Configure environment**
     * The app uses a default `CLIENT_ID` for AniList.
-    * To use your own, create a [New Client on AniList](https://anilist.co/settings/developer) and update `src/App.jsx`.
+    * To use your own, create a [New Client on AniList](https://anilist.co/settings/developer) and update `src/App.jsx` (or the appropriate config file).
 
-4.  **Run Development Server**
+4.  **Run development server**
     ```bash
     npm run dev
     ```
     > Open [http://localhost:5173](http://localhost:5173) in your browser.
 
-5.  **Build for Production**
+5.  **Build for production**
     ```bash
     npm run build
     ```
@@ -130,19 +130,20 @@ mugen-play/
 ├── tailwind.config.js   # TailwindCSS configuration
 ├── vite.config.js       # Vite bundler configuration
 └── package.json         # Dependencies and scripts
+```
 
 ## 🤝 Contributing
 
 We welcome contributions! Please see our [CONTRIBUTING.md](CONTRIBUTING.md) for details on how to set up the project, add new extensions, and submit pull requests.
 
-1.  Fork the Project
-2.  Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3.  Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
-4.  Push to the Branch (`git push origin feature/AmazingFeature`)
-5.  Open a Pull Request
-143. 
-144. ## 🫡 Credits
-145. 
-146. Created and maintained by [Kapy2003](https://github.com/Kapy2003/).
-147. 
-148. Check out my other projects on [GitHub](https://github.com/Kapy2003/).
+1. Fork the project
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m "Add some AmazingFeature"`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a pull request
+
+## 🫡 Credits
+
+Created and maintained by [Kapy2003](https://github.com/Kapy2003/).
+
+Check out my other projects on [GitHub](https://github.com/Kapy2003/).
