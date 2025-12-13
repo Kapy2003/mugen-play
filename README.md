@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="https://anilist.co/img/icons/android-chrome-512x512.png" alt="Mugen Play Logo" width="120" height="120" />
+  <img src="<img width="333" height="235" alt="image" src="https://github.com/user-attachments/assets/09db937a-ac2f-4114-b611-114b9f6aecd8" />" alt="Mugen Play Logo" width="120" height="120" />
 
   # MUGEN PLAY
   
