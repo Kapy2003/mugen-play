@@ -121,6 +121,12 @@ const ExtensionsView = ({ extensions, onToggle, onAddSource, onInstallExtension,
                     </div>
                 ))}
             </div>
+
+            <div className="mt-12 mb-4 text-center">
+                <p className="text-sm text-gray-600">
+                    Project maintained by <a href="https://github.com/Kapy2003/" target="_blank" rel="noopener noreferrer" className="hover:text-gray-400 transition-colors font-medium">Kapy2003</a>
+                </p>
+            </div>
         </div>
     );
 };

@@ -178,6 +178,11 @@ const Sidebar = ({ activeTab, onTabChange, isMobileOpen, setIsMobileOpen, search
                             </button>
                         )}
                     </div>
+                    {!collapsed && (
+                        <div className="mt-4 px-4 text-center">
+                            <a href="https://github.com/Kapy2003/" target="_blank" rel="noopener noreferrer" className="text-xs text-gray-600 hover:text-gray-400 transition-colors block">Created by Kapy</a>
+                        </div>
+                    )}
                 </div>
             </aside>
 

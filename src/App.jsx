@@ -1,3 +1,7 @@
+/**
+ * Mugen Play
+ * Created and Maintained by Kapy2003 (https://github.com/Kapy2003/)
+ */
 import { useState, useEffect, useRef } from 'react';
 import Sidebar from './components/layout/Sidebar';
 import AnimeCard from './components/anime/AnimeCard';
@@ -7,6 +11,7 @@ import ExtensionsView from './components/extensions/ExtensionsView';
 import AddSourceModal from './components/extensions/AddSourceModal';
 import DirectPlayModal from './components/player/DirectPlayModal';
 import Toast from './components/common/Toast';
+import SplashScreen from './components/common/SplashScreen';
 import { ANIME_CATALOG, INITIAL_EXTENSIONS, VIDEO_SOURCES, ANIME_SLUG_OVERRIDES } from './data/constants';
 import { Search, Home, Play, Info, ChevronLeft, ChevronRight, X, Maximize2, Minimize2, PanelRight, Settings2, MoreVertical, Trash2, Filter, Compass, Shuffle, Star, Heart } from 'lucide-react';
 import { AnilistSource } from './extensions/AnilistSource';
@@ -19,6 +24,7 @@ import SourceSelector from './components/common/SourceSelector';
 function App() {
     // --- State ---
     const [activeTab, setActiveTab] = useState('home');
+    const [showSplash, setShowSplash] = useState(true);
     const [isMobileOpen, setIsMobileOpen] = useState(false);
     const [sidebarWidth, setSidebarWidth] = useState(() => {
         const saved = localStorage.getItem('mugen_sidebar_width');
@@ -1383,6 +1389,7 @@ function App() {
 
     return (
         <div className="min-h-screen bg-[#0a0a0a] text-gray-100 font-sans selection:bg-red-500/30">
+            {showSplash && <SplashScreen onComplete={() => setShowSplash(false)} />}
             <Sidebar
                 activeTab={activeTab}
                 onTabChange={handleTabChange}

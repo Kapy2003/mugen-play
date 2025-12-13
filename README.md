@@ -140,3 +140,9 @@ We welcome contributions! Please see our [CONTRIBUTING.md](CONTRIBUTING.md) for 
 3.  Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
 4.  Push to the Branch (`git push origin feature/AmazingFeature`)
 5.  Open a Pull Request
+143. 
+144. ## 🫡 Credits
+145. 
+146. Created and maintained by [Kapy2003](https://github.com/Kapy2003/).
+147. 
+148. Check out my other projects on [GitHub](https://github.com/Kapy2003/).

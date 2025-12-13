@@ -1,9 +1,28 @@
-const dataModules = import.meta.glob('../data/anime_data.json', { eager: true });
-const animeData = Object.values(dataModules)[0]?.default || {};
-
 class LocalSource {
     constructor() {
-        this.data = animeData;
+        this.data = {};
+        this.isLoaded = false;
+        // Start loading immediately
+        this.init();
+    }
+
+    async init() {
+        try {
+            console.log("Fetching local data...");
+            const res = await fetch('/anime_data.json');
+            if (res.ok) {
+                const json = await res.json();
+                // Ensure data structure structure matches expectations (Object of IDs)
+                // If the JSON is array, convert to map? Check prior logic: "Object.values(this.data)" implied it's an object/map.
+                this.data = json;
+                this.isLoaded = true;
+                console.log("Local Data Loaded keys:", Object.keys(this.data).length);
+            } else {
+                console.error("Failed to fetch anime_data.json");
+            }
+        } catch (err) {
+            console.error("Error loading local data:", err);
+        }
     }
 
     /**
@@ -13,13 +32,13 @@ class LocalSource {
      * @returns {Array} List of matching anime objects
      */
     search(query) {
-        if (!query) return [];
+        if (!query || !this.isLoaded) return [];
         const lowerQuery = query.toLowerCase().trim();
 
         // Filter results first
         const results = Object.values(this.data).filter(anime => {
-            const lowerTitle = anime.title.toLowerCase();
-            const lowerId = anime.id.toLowerCase();
+            const lowerTitle = (anime.title || '').toLowerCase();
+            const lowerId = (anime.id || '').toLowerCase();
 
             // Check basic containment
             const titleMatch = lowerTitle.includes(lowerQuery);
@@ -40,8 +59,8 @@ class LocalSource {
 
         // Sort results to prioritize best matches
         return results.sort((a, b) => {
-            const aTitle = a.title.toLowerCase();
-            const bTitle = b.title.toLowerCase();
+            const aTitle = (a.title || '').toLowerCase();
+            const bTitle = (b.title || '').toLowerCase();
             const aId = a.id.toLowerCase();
             const bId = b.id.toLowerCase();
 
@@ -90,9 +109,7 @@ class LocalSource {
      * @returns {boolean}
      */
     isEmpty() {
-        // Efficient empty check
-        for (const _ in this.data) return false;
-        return true;
+        return !this.isLoaded || Object.keys(this.data).length === 0;
     }
 }
 
