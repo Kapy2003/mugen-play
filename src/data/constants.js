@@ -6,14 +6,6 @@ export const INITIAL_EXTENSIONS = [
         icon: 'globe',
         type: 'source',
         enabled: true
-    },
-    {
-        id: 'anitaku-custom-source',
-        name: 'Anitaku',
-        version: '1.0.0',
-        type: 'custom',
-        url: 'https://anitaku.to',
-        enabled: true
     }
 ];
 

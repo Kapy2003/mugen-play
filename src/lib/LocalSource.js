@@ -1,4 +1,5 @@
-import animeData from '../data/anime_data.json';
+const dataModules = import.meta.glob('../data/anime_data.json', { eager: true });
+const animeData = Object.values(dataModules)[0]?.default || {};
 
 class LocalSource {
     constructor() {
@@ -15,8 +16,8 @@ class LocalSource {
         if (!query) return [];
         const lowerQuery = query.toLowerCase().trim();
 
-        // Convert map to array and filter
-        return Object.values(this.data).filter(anime => {
+        // Filter results first
+        const results = Object.values(this.data).filter(anime => {
             const lowerTitle = anime.title.toLowerCase();
             const lowerId = anime.id.toLowerCase();
 
@@ -27,19 +28,39 @@ class LocalSource {
             if (!titleMatch && !idMatch) return false;
 
             // Strictness Check:
-            // If the Result is a "Special", "OVA", or "Movie", but the Query DID NOT ask for it, skip it.
-            // This prevents "Jujutsu Kaisen" from automatically linking to "Jujutsu Kaisen: Specials"
-
             const isSpecial = lowerTitle.includes('special') || lowerTitle.includes('ova') || lowerTitle.includes('movie');
             const queryAskingForSpecial = lowerQuery.includes('special') || lowerQuery.includes('ova') || lowerQuery.includes('movie');
 
             if (isSpecial && !queryAskingForSpecial) {
-                // If query is EXACT match to the start of title, maybe allow it? 
-                // But generally "Title" shouldn't map to "Title: Specials" unless asking.
                 return false;
             }
 
             return true;
+        });
+
+        // Sort results to prioritize best matches
+        return results.sort((a, b) => {
+            const aTitle = a.title.toLowerCase();
+            const bTitle = b.title.toLowerCase();
+            const aId = a.id.toLowerCase();
+            const bId = b.id.toLowerCase();
+
+            // 1. Exact ID match (highest priority)
+            if (aId === lowerQuery && bId !== lowerQuery) return -1;
+            if (bId === lowerQuery && aId !== lowerQuery) return 1;
+
+            // 2. Exact Title match
+            if (aTitle === lowerQuery && bTitle !== lowerQuery) return -1;
+            if (bTitle === lowerQuery && aTitle !== lowerQuery) return 1;
+
+            // 3. Starts with Query
+            const aStarts = aTitle.startsWith(lowerQuery);
+            const bStarts = bTitle.startsWith(lowerQuery);
+            if (aStarts && !bStarts) return -1;
+            if (!bStarts && aStarts) return 1; // logical equivalent
+
+            // 4. Shorter Title (Likely the main series vs a spinoff)
+            return aTitle.length - bTitle.length;
         });
     }
 
@@ -62,6 +83,16 @@ class LocalSource {
      */
     getAnime(id) {
         return this.data[id] || null;
+    }
+
+    /**
+     * Check if data is empty
+     * @returns {boolean}
+     */
+    isEmpty() {
+        // Efficient empty check
+        for (const _ in this.data) return false;
+        return true;
     }
 }
 

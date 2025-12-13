@@ -626,6 +626,7 @@ function App() {
 
             setPlayingAnime({
                 ...updatedAnime, // Contains localId and webId now
+                url: streamUrl, // Ensure URL is updated to match source
                 streamUrl,
                 currentEpisode: episodeNumber, // Track current episode for UI highlighing
                 episodesList: episodesList || [], // The list specifically for the CURRENT source
@@ -933,8 +934,8 @@ function App() {
                             )}
                         </div>
 
-                        {/* Grid - Auto-fit ensures items stretch to fill the row if there are few */}
-                        <div className="grid gap-4 sm:gap-6" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
+                        {/* Grid - Standard columns to prevent stretching */}
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-9 gap-4 sm:gap-6">
                             {animeList.map(anime => (
                                 <AnimeCard
                                     key={anime.id}
@@ -1432,7 +1433,22 @@ function App() {
                                     </div>
 
                                     <SourceSelector
-                                        options={[{ id: 'local', name: 'Local File' }, { id: 'web', name: 'Hianime (Web)' }]}
+                                        options={(() => {
+                                            const opts = [];
+                                            if (!LocalSource.isEmpty()) {
+                                                opts.push({ id: 'local', name: 'Local File' });
+                                            }
+                                            const customOpts = extensions.filter(e => e.type === 'custom' && e.enabled).map(e => ({
+                                                id: e.id,
+                                                name: e.name
+                                            }));
+                                            opts.push(...customOpts);
+
+                                            if (opts.length === 0) {
+                                                opts.push({ id: 'none', name: 'No Source Found' });
+                                            }
+                                            return opts;
+                                        })()}
                                         currentId={playbackSource}
                                         onSelect={(newSource) => handlePlay(playingAnime, null, newSource)}
                                         className="z-50"
