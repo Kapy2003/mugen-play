@@ -1,0 +1,46 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Dependencies
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea
+.DS_Store
+*.suo
+*.ntvs
+*.njsproj
+*.sln
+*.sw?
+
+# Environment variables
+.env
+.env.test
+.env.production
+.env*.local
+
+# Testing & Coverage
+coverage
+
+# Vite & TypeScript
+*.tsbuildinfo
+
+# Data dumps and internal artifacts
+data-dump/
+*.csv
+*.resolved
+.gemini/
+.system_generated/
+scratch/
