@@ -1,60 +1,63 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, memo } from 'react';
 import { ChevronLeft, ChevronRight, Play } from 'lucide-react';
 
-const HeroCarousel = ({ items, onPlay, onInfo }) => {
+const HeroCarousel = memo(({ items, onPlay, onInfo }) => {
     const [currentIndex, setCurrentIndex] = useState(0);
-    const [isDragging, setIsDragging] = useState(false);
     const [isHovered, setIsHovered] = useState(false);
-    const [startX, setStartX] = useState(0);
-    const [startY, setStartY] = useState(0);
-    const [currentX, setCurrentX] = useState(0);
-    const [currentY, setCurrentY] = useState(0);
     const containerRef = useRef(null);
+    const dragRef = useRef({
+        isDragging: false,
+        startX: 0,
+        startY: 0,
+        currentX: 0,
+        currentY: 0
+    });
 
     // Auto-advance (pauses when dragging or hovered)
     useEffect(() => {
-        if (isDragging || isHovered || !items || items.length === 0) return;
+        if (isHovered || !items || items.length === 0) return;
 
         const interval = setInterval(() => {
-            setCurrentIndex(prev => (prev + 1) % items.length);
+            if (!dragRef.current.isDragging) {
+                setCurrentIndex(prev => (prev + 1) % items.length);
+            }
         }, 7000);
 
         return () => clearInterval(interval);
-    }, [items, isDragging, isHovered]);
+    }, [items, isHovered]);
 
-    // Drag / Touch Swipe Handlers
+    // Drag / Touch Swipe Handlers (using refs to avoid re-rendering on every mousemove)
     const handleTouchStart = (e) => {
         const touch = e.touches ? e.touches[0] : e;
         const clientX = touch.clientX || touch.pageX || 0;
         const clientY = touch.clientY || touch.pageY || 0;
-        setIsDragging(true);
-        setStartX(clientX);
-        setStartY(clientY);
-        setCurrentX(clientX);
-        setCurrentY(clientY);
+        dragRef.current = {
+            isDragging: true,
+            startX: clientX,
+            startY: clientY,
+            currentX: clientX,
+            currentY: clientY
+        };
     };
 
     const handleTouchMove = (e) => {
-        if (!isDragging) return;
+        if (!dragRef.current.isDragging) return;
         const touch = e.touches ? e.touches[0] : e;
-        const clientX = touch.clientX || touch.pageX || 0;
-        const clientY = touch.clientY || touch.pageY || 0;
-        setCurrentX(clientX);
-        setCurrentY(clientY);
+        dragRef.current.currentX = touch.clientX || touch.pageX || 0;
+        dragRef.current.currentY = touch.clientY || touch.pageY || 0;
     };
 
     const handleTouchEnd = () => {
-        if (!isDragging || !items || items.length === 0) {
-            setIsDragging(false);
+        if (!dragRef.current.isDragging || !items || items.length === 0) {
+            dragRef.current.isDragging = false;
             return;
         }
 
-        const diffX = currentX - startX;
-        const diffY = currentY - startY;
-        const threshold = 35; // Responsive swipe distance
+        const diffX = dragRef.current.currentX - dragRef.current.startX;
+        const diffY = dragRef.current.currentY - dragRef.current.startY;
+        const threshold = 40;
 
-        // Only trigger horizontal swipe if horizontal movement dominates vertical scroll
-        if (startX !== 0 && currentX !== 0 && Math.abs(diffX) > threshold && Math.abs(diffX) > Math.abs(diffY)) {
+        if (dragRef.current.startX !== 0 && Math.abs(diffX) > threshold && Math.abs(diffX) > Math.abs(diffY)) {
             if (diffX > 0) {
                 // Swiped Right -> Previous
                 setCurrentIndex(prev => (prev - 1 + items.length) % items.length);
@@ -64,11 +67,11 @@ const HeroCarousel = ({ items, onPlay, onInfo }) => {
             }
         }
 
-        setIsDragging(false);
-        setStartX(0);
-        setStartY(0);
-        setCurrentX(0);
-        setCurrentY(0);
+        dragRef.current.isDragging = false;
+        dragRef.current.startX = 0;
+        dragRef.current.startY = 0;
+        dragRef.current.currentX = 0;
+        dragRef.current.currentY = 0;
     };
 
     if (!items || items.length === 0) return null;
@@ -86,7 +89,7 @@ const HeroCarousel = ({ items, onPlay, onInfo }) => {
     return (
         <div
             ref={containerRef}
-            className={`relative h-[320px] sm:h-[480px] rounded-2xl sm:rounded-3xl overflow-hidden group mb-6 sm:mb-8 select-none touch-pan-y ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+            className="relative h-[320px] sm:h-[480px] rounded-2xl sm:rounded-3xl overflow-hidden group mb-6 sm:mb-8 select-none touch-pan-y cursor-grab active:cursor-grabbing will-change-transform transform-gpu"
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => {
                 setIsHovered(false);
@@ -103,6 +106,8 @@ const HeroCarousel = ({ items, onPlay, onInfo }) => {
                 key={featured.id || safeIndex}
                 src={imageSrc}
                 alt={titleText}
+                loading="eager"
+                decoding="async"
                 className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 animate-fade-in pointer-events-none"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-gray-950 via-gray-950/40 to-transparent pointer-events-none">
@@ -195,6 +200,8 @@ const HeroCarousel = ({ items, onPlay, onInfo }) => {
             </div>
         </div>
     );
-};
+});
+
+HeroCarousel.displayName = 'HeroCarousel';
 
 export default HeroCarousel;

@@ -1,11 +1,14 @@
-import { useRef, useState } from 'react';
+import { useRef, memo } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
-const HorizontalScrollList = ({ title, icon: Icon, items, onItemClick, renderItem }) => {
+const HorizontalScrollList = memo(({ title, icon: Icon, items, onItemClick, renderItem }) => {
     const scrollRef = useRef(null);
-    const [isDragging, setIsDragging] = useState(false);
-    const [startX, setStartX] = useState(0);
-    const [scrollLeft, setScrollLeft] = useState(0);
+    const dragRef = useRef({
+        isDragging: false,
+        startX: 0,
+        scrollLeft: 0,
+        hasMoved: false
+    });
 
     const scroll = (direction) => {
         if (scrollRef.current) {
@@ -16,25 +19,35 @@ const HorizontalScrollList = ({ title, icon: Icon, items, onItemClick, renderIte
     };
 
     const handleMouseDown = (e) => {
-        setIsDragging(true);
-        setStartX(e.pageX - scrollRef.current.offsetLeft);
-        setScrollLeft(scrollRef.current.scrollLeft);
+        if (!scrollRef.current) return;
+        dragRef.current = {
+            isDragging: true,
+            startX: e.pageX - scrollRef.current.offsetLeft,
+            scrollLeft: scrollRef.current.scrollLeft,
+            hasMoved: false
+        };
     };
 
     const handleMouseLeave = () => {
-        setIsDragging(false);
+        dragRef.current.isDragging = false;
     };
 
     const handleMouseUp = () => {
-        setIsDragging(false);
+        setTimeout(() => {
+            dragRef.current.isDragging = false;
+            dragRef.current.hasMoved = false;
+        }, 50);
     };
 
     const handleMouseMove = (e) => {
-        if (!isDragging) return;
+        if (!dragRef.current.isDragging || !scrollRef.current) return;
         e.preventDefault();
         const x = e.pageX - scrollRef.current.offsetLeft;
-        const walk = (x - startX) * 2;
-        scrollRef.current.scrollLeft = scrollLeft - walk;
+        const walk = (x - dragRef.current.startX) * 1.8;
+        if (Math.abs(walk) > 5) {
+            dragRef.current.hasMoved = true;
+        }
+        scrollRef.current.scrollLeft = dragRef.current.scrollLeft - walk;
     };
 
     if (!items || items.length === 0) return null;
@@ -74,7 +87,7 @@ const HorizontalScrollList = ({ title, icon: Icon, items, onItemClick, renderIte
 
             <div
                 ref={scrollRef}
-                className="flex gap-3 sm:gap-4 overflow-x-auto no-scrollbar scroll-smooth py-1 sm:py-2 select-none cursor-grab active:cursor-grabbing touch-pan-x overscroll-x-contain"
+                className="flex gap-3 sm:gap-4 overflow-x-auto no-scrollbar scroll-smooth py-1 sm:py-2 select-none cursor-grab active:cursor-grabbing touch-pan-x overscroll-x-contain will-change-scroll transform-gpu"
                 onMouseDown={handleMouseDown}
                 onMouseLeave={handleMouseLeave}
                 onMouseUp={handleMouseUp}
@@ -85,7 +98,7 @@ const HorizontalScrollList = ({ title, icon: Icon, items, onItemClick, renderIte
                         key={item.id || item.slug || idx}
                         className="flex-shrink-0"
                         onClick={() => {
-                            if (!isDragging && onItemClick) onItemClick(item);
+                            if (!dragRef.current.hasMoved && onItemClick) onItemClick(item);
                         }}
                     >
                         {renderItem ? renderItem(item) : (
@@ -94,6 +107,8 @@ const HorizontalScrollList = ({ title, icon: Icon, items, onItemClick, renderIte
                                     <img
                                         src={item.coverUrl || item.image || item.poster || ''}
                                         alt={getTitle(item)}
+                                        loading="lazy"
+                                        decoding="async"
                                         className="w-full h-full object-cover pointer-events-none group-hover:scale-105 transition-transform duration-300"
                                     />
                                 </div>
@@ -105,6 +120,8 @@ const HorizontalScrollList = ({ title, icon: Icon, items, onItemClick, renderIte
             </div>
         </div>
     );
-};
+});
+
+HorizontalScrollList.displayName = 'HorizontalScrollList';
 
 export default HorizontalScrollList;

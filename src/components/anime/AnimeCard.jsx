@@ -1,6 +1,7 @@
+import { memo } from 'react';
 import { Play, Star } from 'lucide-react';
 
-const AnimeCard = ({ anime, onClick }) => {
+const AnimeCard = memo(({ anime, onClick }) => {
     if (!anime) return null;
 
     const displayTitle = typeof anime.title === 'string'
@@ -12,7 +13,7 @@ const AnimeCard = ({ anime, onClick }) => {
 
     return (
         <div
-            className="group relative rounded-xl overflow-hidden cursor-pointer transition-all duration-300 hover:shadow-2xl hover:scale-[1.02] bg-gray-900 border border-gray-800"
+            className="group relative rounded-xl overflow-hidden cursor-pointer transition-all duration-300 hover:shadow-2xl hover:scale-[1.02] bg-gray-900 border border-gray-800 transform-gpu will-change-transform"
             onClick={() => onClick && onClick(anime)}
         >
             <div className="relative aspect-[2/3] overflow-hidden bg-gray-800">
@@ -20,6 +21,8 @@ const AnimeCard = ({ anime, onClick }) => {
                     <img
                         src={coverSrc}
                         alt={displayTitle}
+                        loading="lazy"
+                        decoding="async"
                         className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                     />
                 ) : (
@@ -58,6 +61,8 @@ const AnimeCard = ({ anime, onClick }) => {
             </div>
         </div>
     );
-};
+});
+
+AnimeCard.displayName = 'AnimeCard';
 
 export default AnimeCard;

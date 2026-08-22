@@ -1,7 +1,7 @@
-import { useRef } from 'react';
+import { useRef, memo } from 'react';
 import { Home, Compass, Heart, Film, Settings, LogOut, LogIn, Link } from 'lucide-react';
 
-const Sidebar = ({
+const Sidebar = memo(({
     activeTab,
     onTabChange,
     isMobileOpen,
@@ -236,6 +236,8 @@ const Sidebar = ({
             </nav>
         </>
     );
-};
+});
+
+Sidebar.displayName = 'Sidebar';
 
 export default Sidebar;

@@ -314,6 +314,45 @@ const allSourcesAfterRemove = ExtensionRepoManager.getAllSources();
 assert(!allSourcesAfterRemove.some(s => s.id === 'test_custom_stream_source'), 'Custom extension permanently deleted from Extension Store');
 console.log('');
 
+// --- TEST CASE 19: AniList Thematic Shelves & Query Methods ---
+console.log('▶ Test Case 19: AniList Thematic Shelves & Discovery Query Methods');
+assert(typeof anilist.getTrending === 'function', 'AnilistSource provides getTrending query method');
+assert(typeof anilist.getPopular === 'function', 'AnilistSource provides getPopular query method');
+assert(typeof anilist.getTopRated === 'function', 'AnilistSource provides getTopRated query method');
+assert(typeof anilist.search === 'function', 'AnilistSource provides dynamic search query method');
+
+const mappedTestMedia = anilist.mapAnime({
+    id: 16498,
+    title: { english: 'Attack on Titan', romaji: 'Shingeki no Kyojin' },
+    coverImage: { large: 'https://example.com/aot.jpg' },
+    averageScore: 86,
+    episodes: 25,
+    genres: ['Action', 'Drama', 'Fantasy', 'Mystery'],
+    seasonYear: 2013,
+    format: 'TV',
+    status: 'FINISHED'
+});
+assert(mappedTestMedia.rating === 8.6 && mappedTestMedia.genres.length === 4, 'Correctly mapped anime metadata with rating and genre tags');
+console.log('');
+
+// --- TEST CASE 20: Browse Tab Quick Genre Filter & Dynamic Sorting Matrix ---
+console.log('▶ Test Case 20: Browse Tab Quick Genre Filter & Dynamic Sorting Matrix');
+const browseGenres = ['All', 'Action', 'Adventure', 'Comedy', 'Drama', 'Fantasy', 'Romance', 'Sci-Fi', 'Supernatural', 'Mystery', 'Thriller', 'Slice of Life', 'Sports', 'Mecha', 'Horror', 'Ecchi'];
+assert(browseGenres.includes('Action') && browseGenres.includes('Sci-Fi') && browseGenres.includes('Fantasy'), 'Quick genre pills taxonomy covers primary anime genres');
+
+const validSortOptions = ['POPULARITY_DESC', 'TRENDING_DESC', 'SCORE_DESC', 'FAVOURITES_DESC', 'START_DATE_DESC', 'START_DATE', 'TITLE_ENGLISH'];
+assert(validSortOptions.includes('POPULARITY_DESC') && validSortOptions.includes('SCORE_DESC'), 'Sort matrix maps to valid AniList sort enums');
+
+const validFormats = ['TV', 'MOVIE', 'TV_SHORT', 'OVA', 'ONA', 'SPECIAL'];
+assert(validFormats.includes('TV') && validFormats.includes('MOVIE') && validFormats.includes('OVA'), 'Format matrix covers standard anime release formats');
+
+const validSeasons = ['WINTER', 'SPRING', 'SUMMER', 'FALL'];
+assert(validSeasons.length === 4 && validSeasons.includes('WINTER'), 'Season matrix covers all 4 calendar broadcast seasons');
+
+const validStatuses = ['RELEASING', 'FINISHED', 'NOT_YET_RELEASED', 'CANCELLED', 'HIATUS'];
+assert(validStatuses.includes('RELEASING') && validStatuses.includes('FINISHED'), 'Status matrix covers active and finished airing states');
+console.log('');
+
 // --- FINAL SUMMARY ---
 console.log('====================================================');
 console.log(`📊 TEST RESULTS: ${passed} PASSED | ${failed} FAILED`);

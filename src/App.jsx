@@ -14,7 +14,7 @@ import Toast from './components/common/Toast';
 import SplashScreen from './components/common/SplashScreen';
 import LegalDisclaimerModal from './components/common/LegalDisclaimerModal';
 import { INITIAL_EXTENSIONS } from './data/constants';
-import { Search, Play, ArrowLeft, X, Maximize2, PanelRight, Filter, Compass, Shuffle, Star, Heart, Code, Sliders, Link, Copy, ExternalLink, Sun, Moon, Key, Lock, ChevronRight, Film } from 'lucide-react';
+import { Search, Play, ArrowLeft, X, Maximize2, PanelRight, Filter, Compass, Shuffle, Star, Heart, Code, Sliders, Link, Copy, ExternalLink, Sun, Moon, Key, Lock, ChevronRight, Film, Flame, Trophy, RotateCcw } from 'lucide-react';
 import { AnilistSource } from './extensions/AnilistSource';
 import HeroCarousel from './components/home/HeroCarousel';
 import HorizontalScrollList from './components/common/HorizontalScrollList';
@@ -126,7 +126,10 @@ function App() {
     // Content State
     const [animeList, setAnimeList] = useState([]);
     const [trendingList, setTrendingList] = useState([]);
+    const [popularList, setPopularList] = useState([]);
+    const [topRatedList, setTopRatedList] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
+    const [isShelvesLoading, setIsShelvesLoading] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [page, setPage] = useState(1);
     const [hasNextPage, setHasNextPage] = useState(true); // Simplified: assume next unless empty result
@@ -290,50 +293,81 @@ function App() {
     // Initialize active provider - AniList Core Metadata Engine
     const [activeProvider] = useState(() => new AnilistSource());
 
-    // Load Content from Live AniList Engine when Search, Filters, or Content Rating change
+    // Load Discovery Shelves for Home (Trending, Popular, Top Rated)
     useEffect(() => {
-        const loadContent = async () => {
-            setIsLoading(true);
+        let isMounted = true;
+        const loadHomeShelves = async () => {
+            setIsShelvesLoading(true);
             try {
-                if (searchQuery || Object.keys(filters).length > 0) {
-                    const effectiveFilters = { ...filters, page };
-                    if (contentFilter === 'SAFE') {
-                        effectiveFilters.isAdult = false;
-                    } else if (contentFilter === 'NSFW') {
-                        effectiveFilters.isAdult = true;
-                    }
+                const homeFilters = {};
+                if (contentFilter === 'SAFE') {
+                    homeFilters.isAdult = false;
+                } else if (contentFilter === 'NSFW') {
+                    homeFilters.isAdult = true;
+                }
 
-                    const data = await activeProvider.search(searchQuery, effectiveFilters);
-                    setAnimeList(data.results || []);
-                    setHasNextPage(data.meta?.hasNextPage || false);
-                    setTotalPages(data.meta?.lastPage || 1);
-                } else {
-                    const homeFilters = {};
-                    if (contentFilter === 'SAFE') {
-                        homeFilters.isAdult = false;
-                    } else if (contentFilter === 'NSFW') {
-                        homeFilters.isAdult = true;
-                        homeFilters.sort = 'POPULARITY_DESC';
-                    }
+                const [trendingData, popularData, topRatedData] = await Promise.all([
+                    activeProvider.getTrending({ ...homeFilters, perPage: 25 }),
+                    activeProvider.getPopular({ ...homeFilters, perPage: 25 }),
+                    activeProvider.getTopRated({ ...homeFilters, perPage: 25 })
+                ]);
 
-                    const trendingData = await activeProvider.getTrending({ ...homeFilters, page: 1 });
-                    const catalogData = await activeProvider.search('', { ...homeFilters, page });
-
-                    setAnimeList(catalogData.results || []);
+                if (isMounted) {
                     setTrendingList(trendingData.results || []);
-                    setHasNextPage(catalogData.meta?.hasNextPage || false);
-                    setTotalPages(catalogData.meta?.lastPage || 1);
+                    setPopularList(popularData.results || []);
+                    setTopRatedList(topRatedData.results || []);
                 }
             } catch (err) {
-                console.error("Error loading content from AniList:", err);
-                setToast({ message: 'Error loading content from AniList', type: 'error' });
+                console.error("Error loading home shelves from AniList:", err);
             } finally {
-                setIsLoading(false);
+                if (isMounted) {
+                    setIsShelvesLoading(false);
+                }
             }
         };
 
-        const timeoutId = setTimeout(loadContent, 250);
-        return () => clearTimeout(timeoutId);
+        loadHomeShelves();
+        return () => {
+            isMounted = false;
+        };
+    }, [activeProvider, contentFilter]);
+
+    // Load Paginated Content for Browse (Search & Filter Engine)
+    useEffect(() => {
+        let isMounted = true;
+        const loadBrowseContent = async () => {
+            setIsLoading(true);
+            try {
+                const effectiveFilters = { ...filters, page, perPage: 49 };
+                if (contentFilter === 'SAFE') {
+                    effectiveFilters.isAdult = false;
+                } else if (contentFilter === 'NSFW') {
+                    effectiveFilters.isAdult = true;
+                }
+
+                const data = await activeProvider.search(searchQuery, effectiveFilters);
+                if (isMounted) {
+                    setAnimeList(data.results || []);
+                    setHasNextPage(data.meta?.hasNextPage || false);
+                    setTotalPages(data.meta?.lastPage || 1);
+                }
+            } catch (err) {
+                console.error("Error loading browse content from AniList:", err);
+                if (isMounted) {
+                    setToast({ message: 'Error loading content from AniList', type: 'error' });
+                }
+            } finally {
+                if (isMounted) {
+                    setIsLoading(false);
+                }
+            }
+        };
+
+        const timeoutId = setTimeout(loadBrowseContent, 350);
+        return () => {
+            isMounted = false;
+            clearTimeout(timeoutId);
+        };
     }, [activeProvider, searchQuery, filters, contentFilter, page]);
 
     // --- Handlers ---
@@ -343,11 +377,7 @@ function App() {
 
     // --- History & Progress Logic ---
     const addToHistory = (anime, episode = null, progress = 0, duration = 0) => {
-        console.log("addToHistory called for:", anime?.title, "Ep:", episode); // DEBUG log
-        if (!anime || !anime.id) {
-            console.error("Invalid anime object passed to addToHistory", anime);
-            return;
-        }
+        if (!anime || !anime.id) return;
 
         setWatchHistory(prev => {
             const existing = prev.find(i => i.id === anime.id);
@@ -363,7 +393,6 @@ function App() {
             const validHistory = prev.filter(i => i && i.id && i.id !== anime.id);
 
             const newHistory = [newItem, ...validHistory].slice(0, 50);
-            console.log("Saving new history:", newHistory); // DEBUG log
             localStorage.setItem('mugen_watch_history', JSON.stringify(newHistory));
             return newHistory;
         });
@@ -383,9 +412,9 @@ function App() {
             duration: duration
         };
 
-        // Persist to localStorage throttled (e.g. every 5 seconds)
+        // Persist to localStorage throttled (every 15 seconds)
         const now = Date.now();
-        if (now - lastSaveTime.current > 5000) {
+        if (now - lastSaveTime.current > 15000) {
             saveProgress();
             lastSaveTime.current = now;
         }
@@ -441,13 +470,6 @@ function App() {
         // Reset page on content filter change
         setPage(1);
     };
-
-    // Helper to sanitize text (Simplified or removed if no longer strictly needed for obscenity, 
-    // but useful for generic HTML stripping which is handled in Source. Kept simple or removed.)
-    // User requested specifically to "Hide Adult Content", implying filtering items, not just text.
-    // I will remove the text sanitizer to clean up, or keep it as identity function if used elsewhere.
-    // The previous implementation was used in render. I'll replace usages with direct access or identity.
-    const sanitize = (text) => text; // Identity function to avoid breaking existing calls
 
     const handlePlay = async (anime, episodeNumber = null, overrideSource = null) => {
         try {
@@ -670,6 +692,13 @@ function App() {
         setActiveTab('browse'); // Auto-switch to Browse if filtering from home
     };
 
+    const handleResetFilters = () => {
+        setFilters({});
+        setSearchQuery('');
+        setPage(1);
+        showToast("Filters and search cleared", "info");
+    };
+
     // --- Render ---
 
     // Render Content based on Tab
@@ -697,126 +726,124 @@ function App() {
                     />
                 );
 
-            case 'browse':
+            case 'browse': {
+                const activeFilterCount = Object.keys(filters).length + (contentFilter !== 'ALL' ? 1 : 0);
+                const GENRES = [
+                    'All', 'Action', 'Adventure', 'Comedy', 'Drama', 'Fantasy',
+                    'Romance', 'Sci-Fi', 'Supernatural', 'Mystery', 'Thriller',
+                    'Slice of Life', 'Sports', 'Mecha', 'Horror', 'Ecchi'
+                ];
+
                 return (
                     <div className="p-3 sm:p-8 space-y-6 sm:space-y-8 animate-fade-in max-w-full overflow-hidden">
-                        <div className="flex flex-col gap-6">
+                        <div className="flex flex-col gap-5">
+                            {/* Header Row */}
                             <div className="flex items-center justify-between">
-                                <h2 className="text-2xl font-bold text-white">
-                                    {searchQuery || Object.keys(filters).length > 0 ? 'Search Results' : 'Browse Anime'}
-                                </h2>
-                                <div className="flex items-center gap-4">
-                                    <span className="text-xs px-2.5 py-1 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 font-bold hidden sm:inline-flex items-center gap-1.5">Source: AniList</span>
+                                <div>
+                                    <h2 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2">
+                                        <Compass className="w-6 h-6 text-red-500" />
+                                        <span>{searchQuery ? `Search: "${searchQuery}"` : (filters.genre ? `${filters.genre} Anime` : 'Browse Catalog')}</span>
+                                    </h2>
+                                    <p className="text-xs sm:text-sm text-gray-400 mt-0.5">
+                                        Explore, filter, and stream from thousands of titles via AniList
+                                    </p>
+                                </div>
+                                <div className="flex items-center gap-2 sm:gap-3">
+                                    <span className="text-xs px-2.5 py-1 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 font-bold hidden sm:inline-flex items-center gap-1.5">
+                                        AniList Engine
+                                    </span>
                                     <button
                                         onClick={() => setShowSourceMenu(!showSourceMenu)}
-                                        className={`p-3 rounded-xl transition-colors ${showSourceMenu ? 'bg-red-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700'}`}
+                                        className={`px-3.5 py-2.5 rounded-xl font-medium text-xs sm:text-sm transition-all flex items-center gap-2 cursor-pointer shadow-md ${showSourceMenu || activeFilterCount > 0 ? 'bg-red-600 text-white shadow-red-900/30' : 'bg-gray-800 text-gray-300 hover:text-white hover:bg-gray-700'}`}
+                                        title="Toggle Filter Options"
                                     >
-                                        <Filter className="w-5 h-5" />
+                                        <Filter className="w-4 h-4" />
+                                        <span>Filters</span>
+                                        {activeFilterCount > 0 && (
+                                            <span className="px-1.5 py-0.5 rounded-full bg-white text-red-600 text-[10px] font-black">
+                                                {activeFilterCount}
+                                            </span>
+                                        )}
                                     </button>
                                 </div>
                             </div>
 
-                            {/* Advanced Filter Bar */}
-                            <div className="flex flex-col sm:flex-row gap-4 mb-6 animate-fade-in-up">
-                                <div className="relative flex-1">
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-                                    <input
-                                        type="text"
-                                        placeholder="Search anime to watch..."
-                                        value={searchQuery}
-                                        onChange={handleSearch}
-                                        className="w-full pl-10 pr-4 py-3 bg-gray-800 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-red-600 transition-all border border-gray-700 hover:border-gray-600"
-                                    />
-                                </div>
+                            {/* Instant Search Bar */}
+                            <div className="relative">
+                                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                                <input
+                                    type="text"
+                                    placeholder="Search anime by English or Romaji title (e.g. Solo Leveling, Bleach, Attack on Titan)..."
+                                    value={searchQuery}
+                                    onChange={handleSearch}
+                                    className="w-full pl-10 pr-10 py-3 bg-gray-900 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-red-600 transition-all border border-gray-800 hover:border-gray-700 text-sm shadow-inner"
+                                />
+                                {searchQuery && (
+                                    <button
+                                        onClick={() => {
+                                            setSearchQuery('');
+                                            setPage(1);
+                                        }}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-white rounded-lg hover:bg-gray-800 transition-colors cursor-pointer"
+                                        title="Clear search"
+                                    >
+                                        <X className="w-4 h-4" />
+                                    </button>
+                                )}
                             </div>
 
-                            {/* Advanced Filters Section */}
-                            {showSourceMenu && (
-                                <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 flex flex-wrap gap-4 animate-fade-in items-end">
-
-                                    {/* Content Rating */}
-                                    <div className="space-y-1 flex-1 min-w-[140px]">
-                                        <label className="text-xs font-bold text-gray-500 uppercase">Content</label>
-                                        <select
-                                            value={contentFilter}
-                                            onChange={(e) => cycleContentFilter(e.target.value)}
-                                            className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-500"
+                            {/* Quick Genre Filter Pills */}
+                            <div className="flex gap-2 overflow-x-auto no-scrollbar py-1 select-none touch-pan-x overscroll-x-contain">
+                                {GENRES.map(g => {
+                                    const isSelected = (g === 'All' && !filters.genre) || (filters.genre === g);
+                                    return (
+                                        <button
+                                            key={g}
+                                            onClick={() => {
+                                                handleFilterChange('genre', g === 'All' ? '' : g);
+                                            }}
+                                            className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all duration-200 cursor-pointer ${
+                                                isSelected
+                                                    ? 'bg-red-600 text-white shadow-lg shadow-red-900/30 ring-1 ring-red-400'
+                                                    : 'bg-gray-900 text-gray-400 hover:text-white hover:bg-gray-800 border border-gray-800 hover:border-gray-700'
+                                            }`}
                                         >
-                                            <option value="ALL">All</option>
-                                            <option value="SAFE">Safe</option>
-                                            {hasNsfwExtension && <option value="NSFW">NSFW</option>}
-                                        </select>
-                                    </div>
+                                            {g}
+                                        </button>
+                                    );
+                                })}
+                            </div>
 
+                            {/* Advanced Filters Drawer */}
+                            {showSourceMenu && (
+                                <div className="bg-gray-900/95 border border-gray-800 rounded-2xl p-4 sm:p-5 flex flex-wrap gap-4 animate-fade-in shadow-xl items-end">
                                     {/* Sort */}
-                                    <div className="space-y-1 flex-1 min-w-[140px]">
-                                        <label className="text-xs font-bold text-gray-500 uppercase">Sort</label>
+                                    <div className="space-y-1.5 flex-1 min-w-[140px]">
+                                        <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Sort Order</label>
                                         <select
                                             value={filters.sort || 'POPULARITY_DESC'}
                                             onChange={(e) => handleFilterChange('sort', e.target.value)}
-                                            className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-500"
+                                            className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 cursor-pointer"
                                         >
-                                            <option value="POPULARITY_DESC">Most Popular</option>
-                                            <option value="TRENDING_DESC">Trending</option>
-                                            <option value="SCORE_DESC">Highest Rated</option>
-                                            <option value="START_DATE_DESC">Newest</option>
-                                        </select>
-                                    </div>
-                                    {/* Genres */}
-                                    <div className="space-y-1 flex-1 min-w-[140px]">
-                                        <label className="text-xs font-bold text-gray-500 uppercase">Genres</label>
-                                        <select
-                                            value={filters.genre || ''}
-                                            onChange={(e) => handleFilterChange('genre', e.target.value)}
-                                            className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-500"
-                                        >
-                                            <option value="">Any</option>
-                                            {['Action', 'Adventure', 'Comedy', 'Drama', 'Fantasy', 'Horror', 'Mecha', 'Mystery', 'Romance', 'Sci-Fi', 'Slice of Life', 'Sports', 'Supernatural', 'Thriller'].map(g => (
-                                                <option key={g} value={g}>{g}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-
-                                    {/* Year */}
-                                    <div className="space-y-1 flex-1 min-w-[100px]">
-                                        <label className="text-xs font-bold text-gray-500 uppercase">Year</label>
-                                        <select
-                                            value={filters.year || ''}
-                                            onChange={(e) => handleFilterChange('year', e.target.value)}
-                                            className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-500"
-                                        >
-                                            <option value="">Any</option>
-                                            {Array.from({ length: 30 }, (_, i) => new Date().getFullYear() - i).map(y => (
-                                                <option key={y} value={y}>{y}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-
-                                    {/* Season */}
-                                    <div className="space-y-1 flex-1 min-w-[100px]">
-                                        <label className="text-xs font-bold text-gray-500 uppercase">Season</label>
-                                        <select
-                                            value={filters.season || ''}
-                                            onChange={(e) => handleFilterChange('season', e.target.value)}
-                                            className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-500"
-                                        >
-                                            <option value="">Any</option>
-                                            <option value="WINTER">Winter</option>
-                                            <option value="SPRING">Spring</option>
-                                            <option value="SUMMER">Summer</option>
-                                            <option value="FALL">Fall</option>
+                                            <option value="POPULARITY_DESC">🔥 Most Popular</option>
+                                            <option value="TRENDING_DESC">📈 Trending</option>
+                                            <option value="SCORE_DESC">⭐ Highest Rated</option>
+                                            <option value="FAVOURITES_DESC">❤️ Most Favorites</option>
+                                            <option value="START_DATE_DESC">🆕 Newest</option>
+                                            <option value="START_DATE">⏳ Oldest</option>
+                                            <option value="TITLE_ENGLISH">🔤 Title (A-Z)</option>
                                         </select>
                                     </div>
 
                                     {/* Format */}
-                                    <div className="space-y-1 flex-1 min-w-[100px]">
-                                        <label className="text-xs font-bold text-gray-500 uppercase">Format</label>
+                                    <div className="space-y-1.5 flex-1 min-w-[120px]">
+                                        <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Format</label>
                                         <select
                                             value={filters.format || ''}
                                             onChange={(e) => handleFilterChange('format', e.target.value)}
-                                            className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-500"
+                                            className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 cursor-pointer"
                                         >
-                                            <option value="">Any</option>
+                                            <option value="">Any Format</option>
                                             <option value="TV">TV Show</option>
                                             <option value="MOVIE">Movie</option>
                                             <option value="TV_SHORT">TV Short</option>
@@ -826,15 +853,46 @@ function App() {
                                         </select>
                                     </div>
 
+                                    {/* Season */}
+                                    <div className="space-y-1.5 flex-1 min-w-[110px]">
+                                        <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Season</label>
+                                        <select
+                                            value={filters.season || ''}
+                                            onChange={(e) => handleFilterChange('season', e.target.value)}
+                                            className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 cursor-pointer"
+                                        >
+                                            <option value="">Any Season</option>
+                                            <option value="WINTER">Winter</option>
+                                            <option value="SPRING">Spring</option>
+                                            <option value="SUMMER">Summer</option>
+                                            <option value="FALL">Fall</option>
+                                        </select>
+                                    </div>
+
+                                    {/* Year */}
+                                    <div className="space-y-1.5 flex-1 min-w-[100px]">
+                                        <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Year</label>
+                                        <select
+                                            value={filters.year || ''}
+                                            onChange={(e) => handleFilterChange('year', e.target.value)}
+                                            className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 cursor-pointer"
+                                        >
+                                            <option value="">Any Year</option>
+                                            {Array.from({ length: 30 }, (_, i) => new Date().getFullYear() - i).map(y => (
+                                                <option key={y} value={y}>{y}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
                                     {/* Status */}
-                                    <div className="space-y-1 flex-1 min-w-[120px]">
-                                        <label className="text-xs font-bold text-gray-500 uppercase">Status</label>
+                                    <div className="space-y-1.5 flex-1 min-w-[120px]">
+                                        <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Status</label>
                                         <select
                                             value={filters.status || ''}
                                             onChange={(e) => handleFilterChange('status', e.target.value)}
-                                            className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-500"
+                                            className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 cursor-pointer"
                                         >
-                                            <option value="">Any</option>
+                                            <option value="">Any Status</option>
                                             <option value="RELEASING">Airing</option>
                                             <option value="FINISHED">Finished</option>
                                             <option value="NOT_YET_RELEASED">Upcoming</option>
@@ -842,56 +900,110 @@ function App() {
                                             <option value="HIATUS">Hiatus</option>
                                         </select>
                                     </div>
+
+                                    {/* Content Rating */}
+                                    <div className="space-y-1.5 flex-1 min-w-[120px]">
+                                        <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Content</label>
+                                        <select
+                                            value={contentFilter}
+                                            onChange={(e) => cycleContentFilter(e.target.value)}
+                                            className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 cursor-pointer"
+                                        >
+                                            <option value="ALL">All (Safe + NSFW)</option>
+                                            <option value="SAFE">Safe Only</option>
+                                            {hasNsfwExtension && <option value="NSFW">NSFW Only</option>}
+                                        </select>
+                                    </div>
+
+                                    {/* Reset Filters Button */}
+                                    {(Object.keys(filters).length > 0 || searchQuery) && (
+                                        <div className="flex-1 min-w-[130px]">
+                                            <button
+                                                onClick={handleResetFilters}
+                                                className="w-full px-3 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white rounded-xl text-sm font-semibold transition-colors flex items-center justify-center gap-1.5 border border-gray-700 cursor-pointer"
+                                            >
+                                                <RotateCcw className="w-4 h-4" />
+                                                <span>Reset Filters</span>
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
 
-                        {/* Grid - Responsive full-width layout */}
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-3 sm:gap-6 w-full">
-                            {animeList.map(anime => (
-                                <AnimeCard
-                                    key={anime.id}
-                                    anime={{ ...anime, title: sanitize(anime.title || anime.name) }}
-                                    onClick={setSelectedAnime}
-                                />
-                            ))}
-                        </div>
-
-                        {/* Pagination Controls */}
-                        {animeList.length > 0 && (
-                            <div className="flex justify-center items-center gap-4 mt-8 pb-8">
-                                <button
-                                    onClick={() => setPage(p => Math.max(1, p - 1))}
-                                    disabled={page === 1}
-                                    className={`px-4 py-2 rounded-lg border font-medium transition-colors ${page === 1
-                                        ? 'border-gray-800 text-gray-600 cursor-not-allowed'
-                                        : 'border-gray-700 text-gray-300 hover:text-white hover:border-gray-500'
-                                        }`}
-                                >
-                                    Previous
-                                </button>
-                                <span className="text-gray-400 font-medium">Page {page} of {totalPages || '?'}</span>
-                                <button
-                                    onClick={() => setPage(p => p + 1)}
-                                    disabled={!hasNextPage}
-                                    className={`px-4 py-2 rounded-lg border font-medium transition-colors ${!hasNextPage
-                                        ? 'border-gray-800 text-gray-600 cursor-not-allowed'
-                                        : 'border-gray-700 text-gray-300 hover:text-white hover:border-gray-500'
-                                        }`}
-                                >
-                                    Next
-                                </button>
+                        {/* Loading State */}
+                        {isLoading && (
+                            <div className="flex h-64 items-center justify-center">
+                                <div className="w-8 h-8 border-4 border-red-600 border-t-transparent rounded-full animate-spin"></div>
                             </div>
                         )}
 
-                        {animeList.length === 0 && (
-                            <div className="text-center py-20 text-gray-500">
-                                <Search className="w-12 h-12 mx-auto mb-4 opacity-20" />
-                                <p>No content found matching your search on AniList.</p>
+                        {/* 49-Card Paginated Grid */}
+                        {!isLoading && animeList.length > 0 && (
+                            <>
+                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-3 sm:gap-6 w-full">
+                                    {animeList.map(anime => {
+                                        const historyItem = watchHistory.find(h => h.id === anime.id);
+                                        return (
+                                            <AnimeCard
+                                                key={anime.id}
+                                                anime={{
+                                                    ...anime,
+                                                    title: formatAnimeTitle(anime.title || anime.name),
+                                                    lastEpisode: historyItem ? historyItem.lastEpisode : null
+                                                }}
+                                                onClick={setSelectedAnime}
+                                            />
+                                        );
+                                    })}
+                                </div>
+
+                                {/* Pagination Controls */}
+                                <div className="flex justify-center items-center gap-4 mt-8 pb-8">
+                                    <button
+                                        onClick={() => setPage(p => Math.max(1, p - 1))}
+                                        disabled={page === 1}
+                                        className={`px-4 py-2 rounded-xl border font-medium text-sm transition-colors cursor-pointer ${page === 1
+                                            ? 'border-gray-800 text-gray-600 cursor-not-allowed'
+                                            : 'border-gray-700 text-gray-300 hover:text-white hover:border-gray-500 bg-gray-900'
+                                            }`}
+                                    >
+                                        Previous
+                                    </button>
+                                    <span className="text-gray-400 font-medium text-sm">Page {page} of {totalPages || '?'}</span>
+                                    <button
+                                        onClick={() => setPage(p => p + 1)}
+                                        disabled={!hasNextPage}
+                                        className={`px-4 py-2 rounded-xl border font-medium text-sm transition-colors cursor-pointer ${!hasNextPage
+                                            ? 'border-gray-800 text-gray-600 cursor-not-allowed'
+                                            : 'border-gray-700 text-gray-300 hover:text-white hover:border-gray-500 bg-gray-900'
+                                            }`}
+                                    >
+                                        Next
+                                    </button>
+                                </div>
+                            </>
+                        )}
+
+                        {/* Empty State */}
+                        {!isLoading && animeList.length === 0 && (
+                            <div className="text-center py-20 bg-gray-900/50 border border-gray-800 rounded-3xl p-8 max-w-lg mx-auto">
+                                <Search className="w-12 h-12 mx-auto mb-4 text-gray-600" />
+                                <h3 className="text-lg font-bold text-white mb-1">No Anime Found</h3>
+                                <p className="text-sm text-gray-400 mb-6">
+                                    We couldn&apos;t find any titles matching your query or filter criteria.
+                                </p>
+                                <button
+                                    onClick={handleResetFilters}
+                                    className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-red-900/30 cursor-pointer"
+                                >
+                                    Clear Filters &amp; Search
+                                </button>
                             </div>
                         )}
                     </div>
                 );
+            }
 
             case 'favorites':
                 return (
@@ -1246,7 +1358,7 @@ function App() {
             default:
                 return (
                     <div className="p-3 sm:p-8 space-y-6 sm:space-y-8 animate-fade-in max-w-full overflow-hidden">
-                        {/* Top Bar with Brand & Sun/Moon Theme Toggle */}
+                        {/* Top Bar with Brand, Surprise Me, Direct Play, & Sun/Moon Theme Toggle */}
                         <div className="flex items-center justify-between gap-3 pb-2">
                             <div className="flex items-center gap-2 sm:gap-3">
                                 <h1 className="text-xl sm:text-2xl font-black tracking-wider text-white">
@@ -1258,6 +1370,24 @@ function App() {
                             </div>
 
                             <div className="flex items-center gap-2 sm:gap-2.5">
+                                {/* Random Surprise Me Button */}
+                                <button
+                                    onClick={() => {
+                                        const pool = [...trendingList, ...popularList, ...topRatedList];
+                                        if (pool.length > 0) {
+                                            const random = pool[Math.floor(Math.random() * pool.length)];
+                                            handlePlay(random);
+                                        } else {
+                                            showToast("Loading anime catalog...", "info");
+                                        }
+                                    }}
+                                    className="px-3 sm:px-3.5 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 sm:gap-2 border border-gray-700/80 cursor-pointer shadow-sm active:scale-95"
+                                    title="Surprise Me (Watch Random Anime)"
+                                >
+                                    <Shuffle className="w-3.5 h-3.5 text-red-500" />
+                                    <span className="hidden sm:inline">Surprise Me</span>
+                                </button>
+
                                 {/* Direct Play Action */}
                                 <button
                                     onClick={() => setShowDirectPlay(true)}
@@ -1326,13 +1456,14 @@ function App() {
                         )}
 
                         {/* Loading State */}
-                        {isLoading && (
+                        {isShelvesLoading && trendingList.length === 0 && (
                             <div className="flex h-64 items-center justify-center">
                                 <div className="w-8 h-8 border-4 border-red-600 border-t-transparent rounded-full animate-spin"></div>
                             </div>
                         )}
 
-                        {!isLoading && (
+                        {/* Main Content Shelves */}
+                        {(!isShelvesLoading || trendingList.length > 0) && (
                             <>
                                 {/* Hero Section */}
                                 <HeroCarousel
@@ -1341,7 +1472,7 @@ function App() {
                                     onInfo={setSelectedAnime}
                                 />
 
-                                {/* Scrollable Lists */}
+                                {/* Continue Watching Shelf */}
                                 {watchHistory.length > 0 && (
                                     <HorizontalScrollList
                                         title="Continue Watching"
@@ -1352,7 +1483,7 @@ function App() {
                                                 <div className="aspect-video rounded-xl overflow-hidden mb-2 relative bg-gray-900 border border-white/10">
                                                     <img
                                                         src={anime.bannerUrl || anime.coverUrl}
-                                                        alt={anime.title}
+                                                        alt={formatAnimeTitle(anime.title)}
                                                         className="w-full h-full object-cover pointer-events-none group-hover:scale-105 transition-transform duration-300 opacity-80 group-hover:opacity-100"
                                                     />
                                                     <div className="absolute inset-0 flex items-center justify-center">
@@ -1395,8 +1526,10 @@ function App() {
                                     />
                                 )}
 
+                                {/* Thematic Shelf 1: Trending This Season */}
                                 <HorizontalScrollList
-                                    title="Trending"
+                                    title="Trending This Season"
+                                    icon={Flame}
                                     items={trendingList}
                                     onItemClick={(anime) => setSelectedAnime(anime)}
                                     renderItem={(anime) => (
@@ -1410,231 +1543,121 @@ function App() {
                                                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                                     <Play className="w-7 h-7 sm:w-8 sm:h-8 text-white fill-white" />
                                                 </div>
+                                                {anime.rating > 0 && (
+                                                    <div className="absolute top-2 right-2 bg-black/70 backdrop-blur-md px-1.5 py-0.5 rounded-md flex items-center gap-1">
+                                                        <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
+                                                        <span className="text-[10px] sm:text-xs text-white font-bold">{anime.rating}</span>
+                                                    </div>
+                                                )}
                                             </div>
                                             <h3 className="text-xs sm:text-sm font-medium text-white truncate">{formatAnimeTitle(anime.title)}</h3>
                                         </div>
                                     )}
                                 />
 
-                                {/* Popular Grid */}
-                                <div>
-                                    <div className="flex flex-col gap-4 mb-6">
-                                        <div className="flex items-center justify-between">
-                                            <div className="flex items-center gap-3">
-                                                <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-                                                    Popular Anime
-                                                </h2>
+                                {/* Thematic Shelf 2: All-Time Fan Favorites */}
+                                <HorizontalScrollList
+                                    title="All-Time Fan Favorites"
+                                    icon={Star}
+                                    items={popularList}
+                                    onItemClick={(anime) => setSelectedAnime(anime)}
+                                    renderItem={(anime) => (
+                                        <div className="min-w-[130px] w-[130px] sm:min-w-[160px] sm:w-[160px] flex-shrink-0 cursor-pointer group relative">
+                                            <div className="aspect-[2/3] rounded-xl overflow-hidden mb-2 relative bg-gray-900 border border-gray-800">
+                                                <img
+                                                    src={anime.coverUrl || anime.image || anime.poster || ''}
+                                                    alt={formatAnimeTitle(anime.title)}
+                                                    className="w-full h-full object-cover pointer-events-none group-hover:scale-105 transition-transform duration-300"
+                                                />
+                                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                                    <Play className="w-7 h-7 sm:w-8 sm:h-8 text-white fill-white" />
+                                                </div>
+                                                {anime.year && (
+                                                    <div className="absolute top-2 left-2 bg-black/70 backdrop-blur-md px-1.5 py-0.5 rounded-md">
+                                                        <span className="text-[10px] sm:text-xs text-gray-300 font-bold">{anime.year}</span>
+                                                    </div>
+                                                )}
                                             </div>
-
-                                            <div className="flex items-center gap-2.5">
-                                                {/* Random Anime Button */}
-                                                <button
-                                                    onClick={() => {
-                                                        const pool = animeList.length > 0 ? animeList : (trendingList.length > 0 ? trendingList : []);
-                                                        if (pool.length > 0) {
-                                                            const random = pool[Math.floor(Math.random() * pool.length)];
-                                                            handlePlay(random);
-                                                        } else {
-                                                            showToast("No anime available to randomize", "error");
-                                                        }
-                                                    }}
-                                                    className="p-3 bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white rounded-xl transition-colors cursor-pointer"
-                                                    title="Watch Random Anime"
-                                                >
-                                                    <Shuffle className="w-5 h-5" />
-                                                </button>
-
-                                                <button
-                                                    onClick={() => setShowSourceMenu(!showSourceMenu)}
-                                                    className={`p-3 rounded-xl transition-colors cursor-pointer ${showSourceMenu ? 'bg-red-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700'}`}
-                                                    title="Advanced Filters"
-                                                >
-                                                    <Filter className="w-5 h-5" />
-                                                </button>
-                                            </div>
+                                            <h3 className="text-xs sm:text-sm font-medium text-white truncate">{formatAnimeTitle(anime.title)}</h3>
                                         </div>
+                                    )}
+                                />
 
-                                        {/* Advanced Filter Bar */}
-                                        {/* Advanced Filter Bar */}
-                                        {showSourceMenu && (
-                                            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 flex flex-wrap gap-4 animate-fade-in items-end">
-
-                                                {/* Content */}
-                                                <div className="space-y-1 flex-1 min-w-[140px]">
-                                                    <label className="text-xs font-bold text-gray-500 uppercase">Content</label>
-                                                    <select
-                                                        value={contentFilter}
-                                                        onChange={(e) => cycleContentFilter(e.target.value)}
-                                                        className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-500"
-                                                    >
-                                                        <option value="ALL">All (Safe + NSFW)</option>
-                                                        <option value="SAFE">Safe (No NSFW)</option>
-                                                        {hasNsfwExtension && <option value="NSFW">NSFW Only</option>}
-                                                    </select>
+                                {/* Thematic Shelf 3: Top Rated Classics */}
+                                <HorizontalScrollList
+                                    title="Top Rated Classics"
+                                    icon={Trophy}
+                                    items={topRatedList}
+                                    onItemClick={(anime) => setSelectedAnime(anime)}
+                                    renderItem={(anime) => (
+                                        <div className="min-w-[130px] w-[130px] sm:min-w-[160px] sm:w-[160px] flex-shrink-0 cursor-pointer group relative">
+                                            <div className="aspect-[2/3] rounded-xl overflow-hidden mb-2 relative bg-gray-900 border border-gray-800">
+                                                <img
+                                                    src={anime.coverUrl || anime.image || anime.poster || ''}
+                                                    alt={formatAnimeTitle(anime.title)}
+                                                    className="w-full h-full object-cover pointer-events-none group-hover:scale-105 transition-transform duration-300"
+                                                />
+                                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                                    <Play className="w-7 h-7 sm:w-8 sm:h-8 text-white fill-white" />
                                                 </div>
+                                                {anime.rating > 0 && (
+                                                    <div className="absolute top-2 right-2 bg-black/70 backdrop-blur-md px-1.5 py-0.5 rounded-md flex items-center gap-1">
+                                                        <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
+                                                        <span className="text-[10px] sm:text-xs text-white font-bold">{anime.rating}</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <h3 className="text-xs sm:text-sm font-medium text-white truncate">{formatAnimeTitle(anime.title)}</h3>
+                                        </div>
+                                    )}
+                                />
 
-                                                {/* Sort (Was removed in previous view, adding logic if needed or assuming defaults) - Re-adding Sort based on screenshot request */}
-                                                <div className="space-y-1 flex-1 min-w-[140px]">
-                                                    <label className="text-xs font-bold text-gray-500 uppercase">Sort</label>
-                                                    <select
-                                                        value={filters.sort || 'POPULARITY_DESC'}
-                                                        onChange={(e) => handleFilterChange('sort', e.target.value)}
-                                                        className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-500"
-                                                    >
-                                                        <option value="POPULARITY_DESC">Most Popular</option>
-                                                        <option value="TRENDING_DESC">Trending</option>
-                                                        <option value="SCORE_DESC">Highest Rated</option>
-                                                        <option value="FAVOURITES_DESC">Most Favorites</option>
-                                                        <option value="START_DATE_DESC">Newest</option>
-                                                        <option value="START_DATE">Oldest</option>
-                                                        <option value="TITLE_ENGLISH">Title (A-Z)</option>
-                                                    </select>
+                                {/* Thematic Shelf 4: My Favorites / Bookmarks */}
+                                {favorites.length > 0 && (
+                                    <HorizontalScrollList
+                                        title="Saved to Favorites"
+                                        icon={Heart}
+                                        items={favorites}
+                                        onItemClick={(anime) => setSelectedAnime(anime)}
+                                        renderItem={(anime) => (
+                                            <div className="min-w-[130px] w-[130px] sm:min-w-[160px] sm:w-[160px] flex-shrink-0 cursor-pointer group relative">
+                                                <div className="aspect-[2/3] rounded-xl overflow-hidden mb-2 relative bg-gray-900 border border-gray-800">
+                                                    <img
+                                                        src={anime.coverUrl || anime.image || anime.poster || ''}
+                                                        alt={formatAnimeTitle(anime.title)}
+                                                        className="w-full h-full object-cover pointer-events-none group-hover:scale-105 transition-transform duration-300"
+                                                    />
+                                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                                        <Play className="w-7 h-7 sm:w-8 sm:h-8 text-white fill-white" />
+                                                    </div>
                                                 </div>
-
-                                                {/* Genres */}
-                                                <div className="space-y-1 flex-1 min-w-[140px]">
-                                                    <label className="text-xs font-bold text-gray-500 uppercase">Genres</label>
-                                                    <select
-                                                        value={filters.genre || ''}
-                                                        onChange={(e) => handleFilterChange('genre', e.target.value)}
-                                                        className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-500"
-                                                    >
-                                                        <option value="">Any</option>
-                                                        {['Action', 'Adventure', 'Comedy', 'Drama', 'Fantasy', 'Horror', 'Mecha', 'Mystery', 'Romance', 'Sci-Fi', 'Slice of Life', 'Sports', 'Supernatural', 'Thriller'].map(g => (
-                                                            <option key={g} value={g}>{g}</option>
-                                                        ))}
-                                                    </select>
-                                                </div>
-
-                                                {/* Year */}
-                                                <div className="space-y-1 flex-1 min-w-[100px]">
-                                                    <label className="text-xs font-bold text-gray-500 uppercase">Year</label>
-                                                    <select
-                                                        value={filters.year || ''}
-                                                        onChange={(e) => handleFilterChange('year', e.target.value)}
-                                                        className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-500"
-                                                    >
-                                                        <option value="">Any</option>
-                                                        {Array.from({ length: 30 }, (_, i) => new Date().getFullYear() - i).map(y => (
-                                                            <option key={y} value={y}>{y}</option>
-                                                        ))}
-                                                    </select>
-                                                </div>
-
-                                                {/* Season */}
-                                                <div className="space-y-1 flex-1 min-w-[100px]">
-                                                    <label className="text-xs font-bold text-gray-500 uppercase">Season</label>
-                                                    <select
-                                                        value={filters.season || ''}
-                                                        onChange={(e) => handleFilterChange('season', e.target.value)}
-                                                        className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-500"
-                                                    >
-                                                        <option value="">Any</option>
-                                                        <option value="WINTER">Winter</option>
-                                                        <option value="SPRING">Spring</option>
-                                                        <option value="SUMMER">Summer</option>
-                                                        <option value="FALL">Fall</option>
-                                                    </select>
-                                                </div>
-
-                                                {/* Format */}
-                                                <div className="space-y-1 flex-1 min-w-[100px]">
-                                                    <label className="text-xs font-bold text-gray-500 uppercase">Format</label>
-                                                    <select
-                                                        value={filters.format || ''}
-                                                        onChange={(e) => handleFilterChange('format', e.target.value)}
-                                                        className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-500"
-                                                    >
-                                                        <option value="">Any</option>
-                                                        <option value="TV">TV Show</option>
-                                                        <option value="MOVIE">Movie</option>
-                                                        <option value="TV_SHORT">TV Short</option>
-                                                        <option value="OVA">OVA</option>
-                                                        <option value="ONA">ONA</option>
-                                                        <option value="SPECIAL">Special</option>
-                                                    </select>
-                                                </div>
-
-                                                {/* Status */}
-                                                <div className="space-y-1 flex-1 min-w-[120px]">
-                                                    <label className="text-xs font-bold text-gray-500 uppercase">Status</label>
-                                                    <select
-                                                        value={filters.status || ''}
-                                                        onChange={(e) => handleFilterChange('status', e.target.value)}
-                                                        className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-500"
-                                                    >
-                                                        <option value="">Any</option>
-                                                        <option value="RELEASING">Airing</option>
-                                                        <option value="FINISHED">Finished</option>
-                                                        <option value="NOT_YET_RELEASED">Upcoming</option>
-                                                        <option value="CANCELLED">Cancelled</option>
-                                                        <option value="HIATUS">Hiatus</option>
-                                                    </select>
-                                                </div>
+                                                <h3 className="text-xs sm:text-sm font-medium text-white truncate">{formatAnimeTitle(anime.title)}</h3>
                                             </div>
                                         )}
-                                    </div>
+                                    />
+                                )}
 
-                                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-3 sm:gap-6 w-full">
-                                        {animeList.map(anime => {
-                                            const historyItem = watchHistory.find(h => h.id === anime.id);
-                                            return (
-                                                <AnimeCard
-                                                    key={anime.id}
-                                                    anime={{
-                                                        ...anime,
-                                                        title: sanitize(anime.title || anime.name),
-                                                        lastEpisode: historyItem ? historyItem.lastEpisode : null
-                                                    }}
-                                                    onClick={setSelectedAnime}
-                                                />
-                                            );
-                                        })}
-                                    </div>
-
-                                    {/* Pagination Controls */}
-                                    {animeList.length > 0 && (
-                                        <div className="flex justify-center items-center gap-4 mt-8 pb-8">
-                                            <button
-                                                onClick={() => setPage(p => Math.max(1, p - 1))}
-                                                disabled={page === 1}
-                                                className={`px-4 py-2 rounded-lg border font-medium transition-colors ${page === 1
-                                                    ? 'border-gray-800 text-gray-600 cursor-not-allowed'
-                                                    : 'border-gray-700 text-gray-300 hover:text-white hover:border-gray-500'
-                                                    }`}
-                                            >
-                                                Previous
-                                            </button>
-                                            <span className="text-gray-400 font-medium">Page {page} of {totalPages || '?'}</span>
-                                            <button
-                                                onClick={() => setPage(p => p + 1)}
-                                                disabled={!hasNextPage}
-                                                className={`px-4 py-2 rounded-lg border font-medium transition-colors ${!hasNextPage
-                                                    ? 'border-gray-800 text-gray-600 cursor-not-allowed'
-                                                    : 'border-gray-700 text-gray-300 hover:text-white hover:border-gray-500'
-                                                    }`}
-                                            >
-                                                Next
-                                            </button>
+                                {/* Discovery Banner CTA */}
+                                <div className="mt-8 p-6 sm:p-8 rounded-3xl bg-gradient-to-r from-red-950/40 via-gray-900 to-gray-900 border border-red-500/20 flex flex-col sm:flex-row items-center justify-between gap-6 shadow-2xl">
+                                    <div className="flex items-center gap-4 text-center sm:text-left">
+                                        <div className="w-12 h-12 rounded-2xl bg-red-600/10 text-red-500 border border-red-500/20 flex items-center justify-center shrink-0 mx-auto sm:mx-0">
+                                            <Compass className="w-6 h-6" />
                                         </div>
-                                    )}
-
-                                    {animeList.length === 0 && (
-                                        <div className="text-center py-20 text-gray-500">
-                                            <Search className="w-12 h-12 mx-auto mb-4 opacity-20" />
-                                            <p>No content found matching your search on AniList.</p>
+                                        <div>
+                                            <h3 className="text-base sm:text-lg font-bold text-white">
+                                                Looking for something specific?
+                                            </h3>
+                                            <p className="text-xs sm:text-sm text-gray-400 mt-1 max-w-xl">
+                                                Explore our full catalog of thousands of anime with live search, genre filters, format selectors, and seasonal archives.
+                                            </p>
                                         </div>
-                                    )}
-                                </div>
-
-                                {/* Link to Browse if content is missing or just as a footer */}
-                                <div className="text-center py-8">
+                                    </div>
                                     <button
                                         onClick={() => setActiveTab('browse')}
-                                        className="text-gray-400 hover:text-white transition-colors flex items-center gap-2 mx-auto"
+                                        className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white text-xs sm:text-sm font-bold rounded-xl transition-all shadow-lg shadow-red-900/30 flex items-center gap-2 cursor-pointer hover:scale-105 active:scale-95 shrink-0"
                                     >
-                                        <Compass className="w-5 h-5" />
                                         <span>Explore Full Catalog</span>
+                                        <ChevronRight className="w-4 h-4" />
                                     </button>
                                 </div>
                             </>
