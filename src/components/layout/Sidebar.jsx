@@ -1,5 +1,5 @@
 import { useRef, memo } from 'react';
-import { Home, Compass, Heart, Film, Settings, LogOut, LogIn, Link } from 'lucide-react';
+import { Home, Compass, Heart, Film, SlidersHorizontal, Menu, LogOut, LogIn, Link } from 'lucide-react';
 
 const Sidebar = memo(({
     activeTab,
@@ -20,7 +20,7 @@ const Sidebar = memo(({
         { id: 'browse', label: 'Browse', icon: Compass },
         { id: 'favorites', label: 'Favorites', icon: Heart },
         { id: 'extensions', label: 'Extensions', icon: Film },
-        { id: 'settings', label: 'Settings', icon: Settings },
+        { id: 'settings', label: 'Settings', icon: SlidersHorizontal },
     ];
 
     // Drag Resize Logic
@@ -86,24 +86,41 @@ const Sidebar = memo(({
                 />
 
                 <div className="flex flex-col h-full p-4 relative overflow-hidden">
-                    {/* Logo */}
-                    <button
-                        onClick={(e) => {
-                            e.preventDefault();
-                            onTabChange('home');
-                        }}
-                        className={`flex items-center gap-2 ${collapsed ? 'justify-center px-0' : 'px-4'} py-6 w-full text-left hover:opacity-80 transition-opacity cursor-pointer`}
-                        type="button"
-                    >
-                        <div className="w-8 h-8 shrink-0 rounded-lg bg-gradient-to-br from-red-600 to-red-800 flex items-center justify-center shadow-md shadow-red-900/30">
-                            <span className="text-white font-black text-lg">M</span>
-                        </div>
-                        {!collapsed && (
-                            <h1 className="text-xl font-black text-white whitespace-nowrap overflow-hidden tracking-tight">
-                                MUGEN<span className="text-red-600">PLAY</span>
-                            </h1>
-                        )}
-                    </button>
+                    {/* Header: Logo & 3-Line Menu Collapse Toggle */}
+                    <div className={`flex items-center ${collapsed ? 'justify-center flex-col gap-3' : 'justify-between px-2'} py-4 mb-2 w-full`}>
+                        <button
+                            onClick={(e) => {
+                                e.preventDefault();
+                                onTabChange('home');
+                            }}
+                            className="flex items-center gap-2 text-left hover:opacity-80 transition-opacity cursor-pointer min-w-0"
+                            type="button"
+                        >
+                            <div className="w-8 h-8 shrink-0 rounded-lg bg-gradient-to-br from-red-600 to-red-800 flex items-center justify-center shadow-md shadow-red-900/30">
+                                <span className="text-white font-black text-lg">M</span>
+                            </div>
+                            {!collapsed && (
+                                <h1 className="text-xl font-black text-white whitespace-nowrap overflow-hidden tracking-tight">
+                                    MUGEN<span className="text-red-600">PLAY</span>
+                                </h1>
+                            )}
+                        </button>
+
+                        {/* 3-Lines Menu Icon for Collapse / Expand Toggle */}
+                        <button
+                            type="button"
+                            onClick={() => {
+                                if (setCollapsed) {
+                                    setCollapsed(!collapsed);
+                                }
+                            }}
+                            className="p-2 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-colors cursor-pointer hidden lg:flex items-center justify-center"
+                            title={collapsed ? "Expand sidebar (3 lines)" : "Collapse sidebar (3 lines)"}
+                            aria-label="Toggle sidebar"
+                        >
+                            <Menu className="w-5 h-5" />
+                        </button>
+                    </div>
 
                     {/* Direct Play */}
                     <div className={`px-2 mb-6 ${collapsed ? 'hidden' : 'block'}`}>
