@@ -52,7 +52,7 @@ export const AnimeUrlResolver = {
             const hianimeMatch = anime.url.match(/hianime\.(ad|to|nz|mm|sx)\/watch\/([^/?#]+)(?:\/ep-(\d+))?/i);
             if (hianimeMatch) {
                 const slug = hianimeMatch[2];
-                const targetEp = hianimeMatch[3] ? parseInt(hianimeMatch[3], 10) : ep;
+                const targetEp = episodeNum ? ep : (hianimeMatch[3] ? parseInt(hianimeMatch[3], 10) : ep);
                 return {
                     streamUrl: `https://hianime.ad/watch/${slug}/ep-${targetEp}`,
                     episodesList: Array.from({ length: 26 }, (_, idx) => ({
@@ -116,7 +116,7 @@ export const AnimeUrlResolver = {
         // 3. Resolve Direct Stream URL for Selected Source
         let streamUrl = '';
 
-        if (targetExt) {
+        if (targetExt && targetExt.enabled !== false) {
             const host = (targetExt.baseUrl || targetExt.url || '').toLowerCase();
             const extId = (targetExt.id || '').toLowerCase();
 
@@ -146,8 +146,8 @@ export const AnimeUrlResolver = {
                 streamUrl = `${targetExt.baseUrl || 'https://anitaku.so'}/watch/${primarySlug}?ep=${ep}`;
             }
         } else {
-            // Default stream
-            streamUrl = `https://anitaku.so/streaming.php?id=${gogoSlug}-episode-${ep}`;
+            // No video streaming extension is installed / selected
+            streamUrl = '';
         }
 
         // 4. Generate Simple Episode Playlist
@@ -158,14 +158,8 @@ export const AnimeUrlResolver = {
                 totalEpisodes = 1125;
             } else if (titleText.includes('detective conan') || titleText.includes('case closed')) {
                 totalEpisodes = 1150;
-            } else if (titleText.includes('bleach') && !titleText.includes('thousand-year') && !titleText.includes('tybw')) {
-                totalEpisodes = 366;
-            } else if (titleText.includes('naruto shippuden')) {
+            } else if (titleText.includes('naruto')) {
                 totalEpisodes = 500;
-            } else if (titleText.includes('naruto') && !titleText.includes('shippuden') && !titleText.includes('boruto')) {
-                totalEpisodes = 220;
-            } else if (titleText.includes('black clover')) {
-                totalEpisodes = 170;
             } else if (titleText.includes('fairy tail')) {
                 totalEpisodes = 328;
             } else if (titleText.includes('dragon ball z')) {
@@ -180,15 +174,18 @@ export const AnimeUrlResolver = {
                 totalEpisodes = 24;
             }
         }
-        const episodesList = Array.from({ length: totalEpisodes }, (_, idx) => {
-            const epNumber = idx + 1;
-            return {
-                id: `${primarySlug}-ep-${epNumber}`,
-                number: epNumber,
-                title: `Episode ${epNumber}`,
-                url: streamUrl.replace(`episode-${ep}`, `episode-${epNumber}`).replace(`?ep=${ep}`, `?ep=${epNumber}`).replace(`/${ep}`, `/${epNumber}`)
-            };
-        });
+        let episodesList = anime?.episodesList;
+        if (!Array.isArray(episodesList) || episodesList.length === 0) {
+            episodesList = Array.from({ length: totalEpisodes }, (_, idx) => {
+                const epNumber = idx + 1;
+                return {
+                    id: `${primarySlug}-ep-${epNumber}`,
+                    number: epNumber,
+                    title: `Episode ${epNumber}`,
+                    url: streamUrl.replace(`episode-${ep}`, `episode-${epNumber}`).replace(`?ep=${ep}`, `?ep=${epNumber}`).replace(`/${ep}`, `/${epNumber}`)
+                };
+            });
+        }
 
         return {
             streamUrl,

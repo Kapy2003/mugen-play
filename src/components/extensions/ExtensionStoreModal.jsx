@@ -51,9 +51,9 @@ const ExtensionStoreModal = ({ isOpen, onClose, onInstall, onOpenAddSource, inst
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
-            <div className="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-4xl max-h-[90vh] sm:max-h-[85vh] flex flex-col shadow-2xl overflow-hidden animate-scale-in">
+            <div className="store-modal-card bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-4xl max-h-[90vh] sm:max-h-[85vh] flex flex-col shadow-2xl overflow-hidden animate-scale-in">
                 {/* Header */}
-                <div className="p-4 sm:p-6 border-b border-gray-800 flex justify-between items-center bg-gray-950/60">
+                <div className="store-modal-header p-4 sm:p-6 border-b border-gray-800 flex justify-between items-center bg-gray-950/60">
                     <div className="flex items-center gap-3">
                         <div className="p-2.5 bg-red-600/10 text-red-500 rounded-xl border border-red-500/20 shrink-0">
                             <Sparkles className="w-5 h-5" />
@@ -89,7 +89,7 @@ const ExtensionStoreModal = ({ isOpen, onClose, onInstall, onOpenAddSource, inst
                 </div>
 
                 {/* Filters */}
-                <div className="p-3 sm:p-4 border-b border-gray-800 bg-gray-900/30 flex flex-wrap gap-3 items-center justify-between">
+                <div className="store-modal-filters p-3 sm:p-4 border-b border-gray-800 bg-gray-900/30 flex flex-wrap gap-3 items-center justify-between">
                     <div className="relative flex-1 min-w-[180px]">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
                         <input
@@ -97,7 +97,7 @@ const ExtensionStoreModal = ({ isOpen, onClose, onInstall, onOpenAddSource, inst
                             placeholder="Search sources by name or URL..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="w-full pl-9 pr-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-xs sm:text-sm text-white focus:outline-none focus:border-red-500 transition-colors"
+                            className="store-input w-full pl-9 pr-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-xs sm:text-sm text-white focus:outline-none focus:border-red-500 transition-colors"
                         />
                     </div>
 
@@ -105,7 +105,7 @@ const ExtensionStoreModal = ({ isOpen, onClose, onInstall, onOpenAddSource, inst
                         <select
                             value={selectedLang}
                             onChange={(e) => setSelectedLang(e.target.value)}
-                            className="bg-gray-800 border border-gray-700 text-white text-xs rounded-lg px-2.5 py-2 focus:outline-none focus:border-red-500 uppercase font-semibold"
+                            className="store-select bg-gray-800 border border-gray-700 text-white text-xs rounded-lg px-2.5 py-2 focus:outline-none focus:border-red-500 uppercase font-semibold"
                         >
                             {languages.map(lang => (
                                 <option key={lang} value={lang}>
@@ -116,7 +116,7 @@ const ExtensionStoreModal = ({ isOpen, onClose, onInstall, onOpenAddSource, inst
 
                         <button
                             onClick={() => setShowNsfw(!showNsfw)}
-                            className={`px-3 py-2 rounded-lg text-xs font-bold transition-all border ${showNsfw
+                            className={`store-btn px-3 py-2 rounded-lg text-xs font-bold transition-all border cursor-pointer ${showNsfw
                                 ? 'bg-red-500/20 text-red-400 border-red-500/30'
                                 : 'bg-gray-800 text-gray-400 border-gray-700 hover:text-white'
                                 }`}
@@ -136,9 +136,9 @@ const ExtensionStoreModal = ({ isOpen, onClose, onInstall, onOpenAddSource, inst
                             return (
                                 <div
                                     key={source.id}
-                                    className={`p-4 sm:p-5 rounded-2xl border transition-all shadow-xl flex flex-col justify-between ${
+                                    className={`store-item-card p-4 sm:p-5 rounded-2xl border transition-all shadow-xl flex flex-col justify-between ${
                                         source.recommended
-                                            ? 'border-red-500/40 bg-gradient-to-b from-gray-900 via-gray-900 to-red-950/25 hover:border-red-500/70'
+                                            ? 'store-item-card-rec border-red-500/40 bg-gradient-to-b from-gray-900 via-gray-900 to-red-950/25 hover:border-red-500/70'
                                             : 'border-gray-800 bg-gray-900/60 hover:bg-gray-800/80 hover:border-gray-700'
                                     }`}
                                 >

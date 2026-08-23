@@ -1,4 +1,5 @@
 import { Extension } from '../lib/ExtensionSDK.js';
+import { ConsumetService } from '../lib/services/ConsumetService.js';
 
 export class AnilistSource extends Extension {
     constructor() {
@@ -77,16 +78,48 @@ export class AnilistSource extends Extension {
             }
         }
 
+        const streamEpisodes = media.streamingEpisodes || [];
+        const totalCount = resolvedEpisodes || (streamEpisodes.length > 0 ? streamEpisodes.length : 12);
+        const fallbackThumb = media.bannerImage || media.coverImage?.extraLarge || media.coverImage?.large;
+
+        // Build rich episode metadata list (names & thumbnails)
+        const episodesList = [];
+        for (let i = 1; i <= totalCount; i++) {
+            const matched = streamEpisodes.find(ep => {
+                const epMatch = ep.title?.match(/Episode\s+(\d+)/i);
+                return epMatch && parseInt(epMatch[1], 10) === i;
+            }) || (streamEpisodes[i - 1] ? streamEpisodes[i - 1] : null);
+
+            let cleanTitle = `Episode ${i}`;
+            let thumbnail = matched?.thumbnail || fallbackThumb;
+
+            if (matched?.title) {
+                const stripped = matched.title.replace(/^(?:Episode|Ep)\s*\d+\s*[-:—–]\s*/i, '').trim();
+                cleanTitle = stripped || `Episode ${i}`;
+            }
+
+            episodesList.push({
+                number: i,
+                title: cleanTitle,
+                fullTitle: `Episode ${i}: ${cleanTitle}`,
+                thumbnail: thumbnail,
+                url: matched?.url || null,
+                site: matched?.site || 'MugenStream'
+            });
+        }
+
         return {
             id: media.id.toString(),
             title: media.title.english || media.title.romaji,
             romaji: media.title.romaji,
+            native: media.title.native,
             description: media.description?.replace(/<[^>]*>?/gm, '') || 'No description available.', // Strip HTML
             synopsis: media.description?.replace(/<[^>]*>?/gm, '') || 'No description available.',
             coverUrl: media.coverImage?.large || media.coverImage?.extraLarge,
             bannerUrl: media.bannerImage || media.coverImage?.extraLarge,
             rating: media.averageScore ? media.averageScore / 10 : 0,
-            episodes: resolvedEpisodes || 12,
+            episodes: totalCount,
+            episodesList: episodesList,
             genres: media.genres,
             year: media.seasonYear,
             format: media.format, // Add Format
@@ -123,6 +156,7 @@ export class AnilistSource extends Extension {
                 title {
                     romaji
                     english
+                    native
                 }
                 coverImage {
                     large
@@ -139,6 +173,12 @@ export class AnilistSource extends Extension {
                 nextAiringEpisode {
                     episode
                     timeUntilAiring
+                }
+                streamingEpisodes {
+                    title
+                    thumbnail
+                    url
+                    site
                 }
                 siteUrl
                 trailer {
@@ -187,6 +227,7 @@ export class AnilistSource extends Extension {
                 title {
                     romaji
                     english
+                    native
                 }
                 coverImage {
                     large
@@ -203,6 +244,12 @@ export class AnilistSource extends Extension {
                 nextAiringEpisode {
                     episode
                     timeUntilAiring
+                }
+                streamingEpisodes {
+                    title
+                    thumbnail
+                    url
+                    site
                 }
                 siteUrl
                 trailer {
@@ -251,6 +298,7 @@ export class AnilistSource extends Extension {
                 title {
                     romaji
                     english
+                    native
                 }
                 coverImage {
                     large
@@ -267,6 +315,12 @@ export class AnilistSource extends Extension {
                 nextAiringEpisode {
                     episode
                     timeUntilAiring
+                }
+                streamingEpisodes {
+                    title
+                    thumbnail
+                    url
+                    site
                 }
                 siteUrl
                 trailer {
@@ -306,14 +360,6 @@ export class AnilistSource extends Extension {
         // Remove internal refresh token
         delete variables._t;
 
-        // Dynamic Query Construction based on filters
-        // AniList API types:
-        // genre: String
-        // year: Int (seasonYear)
-        // season: MediaSeason (WINTER, SPRING, SUMMER, FALL)
-        // format: MediaFormat (TV, TV_SHORT, MOVIE, SPECIAL, OVA, ONA, MUSIC)
-        // status: MediaStatus (FINISHED, RELEASING, NOT_YET_RELEASED, CANCELLED, HIATUS)
-
         const gqlQuery = `
     query ($page: Int, $perPage: Int, $search: String, $genre: String, $year: Int, $season: MediaSeason, $format: MediaFormat, $status: MediaStatus, $sort: [MediaSort]${variables.isAdult !== undefined ? ', $isAdult: Boolean' : ''}) {
         Page(page: $page, perPage: $perPage) {
@@ -339,6 +385,7 @@ export class AnilistSource extends Extension {
                 title {
                     romaji
                     english
+                    native
                 }
                 coverImage {
                     large
@@ -355,6 +402,12 @@ export class AnilistSource extends Extension {
                 nextAiringEpisode {
                     episode
                     timeUntilAiring
+                }
+                streamingEpisodes {
+                    title
+                    thumbnail
+                    url
+                    site
                 }
                 siteUrl
                 trailer {
@@ -377,9 +430,75 @@ export class AnilistSource extends Extension {
         }
     }
 
+    async getAnimeDetails(id) {
+        const query = `
+        query ($id: Int) {
+            Media(id: $id, type: ANIME) {
+                id
+                title {
+                    romaji
+                    english
+                    native
+                }
+                coverImage {
+                    large
+                    extraLarge
+                }
+                bannerImage
+                description
+                averageScore
+                episodes
+                genres
+                seasonYear
+                season
+                format
+                status
+                nextAiringEpisode {
+                    episode
+                    timeUntilAiring
+                }
+                streamingEpisodes {
+                    title
+                    thumbnail
+                    url
+                    site
+                }
+                siteUrl
+                trailer {
+                    id
+                    site
+                }
+            }
+        }
+        `;
+        try {
+            const data = await this.runQuery(query, { id: parseInt(id, 10) });
+            if (data?.Media) {
+                const baseAnime = this.mapAnime(data.Media);
+                // Attempt rich TMDB metadata enrichment via Consumet
+                try {
+                    const consumetData = await ConsumetService.fetchAnimeInfo(id);
+                    if (consumetData && Array.isArray(consumetData.episodes) && consumetData.episodes.length > 0) {
+                        const enrichedEpisodes = ConsumetService.mapEpisodes(consumetData.episodes, baseAnime);
+                        if (enrichedEpisodes.length > 0) {
+                            baseAnime.episodesList = enrichedEpisodes;
+                            baseAnime.episodes = Math.max(baseAnime.episodes || 0, enrichedEpisodes.length);
+                        }
+                    }
+                } catch (metaErr) {
+                    console.warn('Consumet enrichment note:', metaErr?.message || metaErr);
+                }
+                return baseAnime;
+            }
+            return null;
+        } catch (error) {
+            console.error("AniList Details Error", error);
+            return null;
+        }
+    }
+
     async getStream(anime) {
         // Prioritize the Extension/Portal URL (Source)
-        // The user prefers "the extension" (the site itself) over a YouTube trailer default.
         if (anime.source) {
             return anime.source;
         }

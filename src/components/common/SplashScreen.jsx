@@ -3,6 +3,7 @@ import { useEffect, useState, useRef } from 'react';
 const SplashScreen = ({ onComplete }) => {
     const [isVisible, setIsVisible] = useState(true);
     const [opacity, setOpacity] = useState(100);
+    const [isLight, setIsLight] = useState(false);
     const onCompleteRef = useRef(onComplete);
 
     useEffect(() => {
@@ -10,6 +11,15 @@ const SplashScreen = ({ onComplete }) => {
     }, [onComplete]);
 
     useEffect(() => {
+        // Detect theme on mount
+        try {
+            const savedTheme = localStorage.getItem('mugen_theme');
+            const isLightActive = savedTheme === 'light' || document.documentElement.classList.contains('light-theme');
+            setIsLight(isLightActive);
+        } catch {
+            setIsLight(false);
+        }
+
         // Start fade out after 800ms
         const timer1 = setTimeout(() => {
             setOpacity(0);
@@ -41,30 +51,40 @@ const SplashScreen = ({ onComplete }) => {
     return (
         <div
             onClick={handleDismiss}
-            className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center transition-opacity duration-300 ease-out cursor-pointer select-none"
+            className={`fixed inset-0 z-[100] flex flex-col items-center justify-center transition-opacity duration-300 ease-out cursor-pointer select-none ${
+                isLight ? 'bg-[#f8fafc]' : 'bg-[#08080a]'
+            }`}
             style={{ opacity: opacity / 100 }}
             title="Click to continue"
         >
             <div className="relative flex items-center justify-center">
                 {/* Pulsing Glow */}
-                <div className="absolute w-32 h-32 bg-red-600/30 rounded-full blur-2xl animate-pulse"></div>
+                <div className="absolute w-32 h-32 bg-red-600/25 rounded-full blur-2xl animate-pulse"></div>
 
                 {/* Logo Container */}
-                <div className="relative z-10 w-24 h-24 bg-gradient-to-br from-gray-900 to-black rounded-3xl border border-gray-800 flex items-center justify-center shadow-2xl overflow-hidden group">
+                <div className={`relative z-10 w-24 h-24 rounded-3xl border flex items-center justify-center shadow-2xl overflow-hidden group transition-colors ${
+                    isLight 
+                        ? 'bg-white border-slate-200/80 shadow-slate-200' 
+                        : 'bg-gradient-to-br from-gray-900 to-black border-gray-800'
+                }`}>
                     {/* Shine Effect */}
-                    <div className="absolute inset-0 bg-gradient-to-tr from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                    <div className="absolute inset-0 bg-gradient-to-tr from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
 
-                    <div className="relative w-16 h-16 rounded-xl bg-gradient-to-br from-red-600 to-red-800 flex items-center justify-center shadow-lg animate-pop-in">
-                        <span className="text-white font-bold text-4xl leading-none">M</span>
+                    <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-red-600 to-red-800 flex items-center justify-center shadow-lg shadow-red-900/30 animate-pop-in">
+                        <span className="text-white font-black text-4xl leading-none">M</span>
                     </div>
                 </div>
             </div>
 
             <div className="mt-8 overflow-hidden text-center">
-                <h1 className="text-3xl font-black text-white tracking-wider animate-slide-up">
-                    MUGEN <span className="text-red-500">PLAY</span>
+                <h1 className={`text-3xl font-black tracking-wider animate-slide-up ${
+                    isLight ? 'text-slate-900' : 'text-white'
+                }`}>
+                    MUGEN <span className="text-red-600">PLAY</span>
                 </h1>
-                <p className="text-xs text-gray-400 font-semibold tracking-wider uppercase mt-1 animate-slide-up">
+                <p className={`text-xs font-semibold tracking-wider uppercase mt-1 animate-slide-up ${
+                    isLight ? 'text-slate-500' : 'text-gray-400'
+                }`}>
                     Developed by Kapy
                 </p>
             </div>

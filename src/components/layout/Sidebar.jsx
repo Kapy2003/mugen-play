@@ -1,5 +1,5 @@
 import { useRef, memo } from 'react';
-import { Home, Compass, Heart, Film, SlidersHorizontal, Menu, LogOut, LogIn, Link } from 'lucide-react';
+import { Home, Compass, Heart, Film, SlidersHorizontal, Menu, LogOut, LogIn } from 'lucide-react';
 
 const Sidebar = memo(({
     activeTab,
@@ -9,7 +9,6 @@ const Sidebar = memo(({
     user,
     onLogin,
     onLogout,
-    onOpenDirectPlay,
     width,
     setWidth,
     collapsed,
@@ -122,17 +121,6 @@ const Sidebar = memo(({
                         </button>
                     </div>
 
-                    {/* Direct Play */}
-                    <div className={`px-2 mb-6 ${collapsed ? 'hidden' : 'block'}`}>
-                        <button
-                            onClick={onOpenDirectPlay}
-                            className="w-full flex items-center gap-3 px-4 py-3 bg-gray-800/80 hover:bg-gray-800 text-gray-300 hover:text-white rounded-xl transition-all border border-gray-700/50 hover:border-gray-600 group cursor-pointer shadow-sm"
-                        >
-                            <Link className="w-4 h-4 text-red-500 group-hover:scale-110 transition-transform" />
-                            <span className="text-sm font-semibold">Direct Stream</span>
-                        </button>
-                    </div>
-
                     {/* Navigation */}
                     <nav className="flex-1 space-y-2">
                         {menuItems.map((item) => {
@@ -228,7 +216,7 @@ const Sidebar = memo(({
             )}
 
             {/* Mobile Bottom Navigation Bar */}
-            <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-gray-900/95 backdrop-blur-lg border-t border-gray-800 flex items-center justify-around py-2 px-3 shadow-2xl safe-area-bottom">
+            <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-gray-900/95 backdrop-blur-xl border-t border-gray-800 flex items-center justify-around py-1.5 px-2 shadow-2xl safe-area-bottom">
                 {menuItems.map((item) => {
                     const Icon = item.icon;
                     const isActive = activeTab === item.id;
@@ -239,14 +227,14 @@ const Sidebar = memo(({
                                 onTabChange(item.id);
                                 setIsMobileOpen(false);
                             }}
-                            className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all cursor-pointer ${
+                            className={`flex flex-col items-center justify-center min-h-[48px] py-1 px-3 rounded-2xl transition-all cursor-pointer select-none active:scale-90 ${
                                 isActive
-                                    ? 'text-red-500 font-bold scale-105'
-                                    : 'text-gray-400 hover:text-white font-medium'
+                                    ? 'text-red-500 font-bold bg-red-500/10'
+                                    : 'text-gray-400 hover:text-white font-medium hover:bg-white/5'
                             }`}
                         >
-                            <Icon className={`w-5 h-5 ${isActive ? 'text-red-500 stroke-[2.5]' : 'text-gray-400'}`} />
-                            <span className="text-[10px] tracking-tight">{item.label}</span>
+                            <Icon className={`w-5 h-5 transition-transform duration-200 ${isActive ? 'text-red-500 stroke-[2.5] scale-110' : 'text-gray-400'}`} />
+                            <span className="text-[10px] tracking-tight mt-0.5">{item.label}</span>
                         </button>
                     );
                 })}

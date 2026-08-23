@@ -11,9 +11,15 @@ const AnimeCard = memo(({ anime, onClick }) => {
     const displayGenres = Array.isArray(anime.genres) ? anime.genres.slice(0, 2).join(', ') : 'Anime';
     const coverSrc = anime.coverUrl || anime.image || anime.poster || '';
 
+    // Standardize rating representation (e.g. 8.5)
+    const rawRating = anime.rating || anime.score;
+    const formattedRating = rawRating && !isNaN(rawRating) && Number(rawRating) > 0
+        ? (Number(rawRating) > 10 ? (Number(rawRating) / 10).toFixed(1) : Number(rawRating).toFixed(1))
+        : null;
+
     return (
         <div
-            className="group relative rounded-xl overflow-hidden cursor-pointer transition-all duration-300 hover:shadow-2xl hover:scale-[1.02] bg-gray-900 border border-gray-800 transform-gpu will-change-transform"
+            className="group relative rounded-2xl overflow-hidden cursor-pointer transition-all duration-300 hover:shadow-2xl hover:-translate-y-1 hover:scale-[1.02] active:scale-[0.97] bg-gray-900 border border-gray-800 transform-gpu will-change-transform smooth-transition"
             onClick={() => onClick && onClick(anime)}
         >
             <div className="relative aspect-[2/3] overflow-hidden bg-gray-800">
@@ -23,40 +29,48 @@ const AnimeCard = memo(({ anime, onClick }) => {
                         alt={displayTitle}
                         loading="lazy"
                         decoding="async"
-                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                     />
                 ) : (
-                    <div className="w-full h-full flex items-center justify-center text-gray-600 text-xs">
+                    <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">
                         No Image
                     </div>
                 )}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
-                    <button className="w-12 h-12 rounded-full bg-red-600 flex items-center justify-center transform scale-0 group-hover:scale-100 transition-transform duration-300 delay-100 hover:bg-red-700 cursor-pointer">
-                        <Play className="w-5 h-5 text-white ml-1 fill-current" />
-                    </button>
+
+                {/* Hover Play Button Overlay */}
+                <div className="image-overlay-dark absolute inset-0 bg-black/45 backdrop-blur-[1px] opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center pointer-events-none">
+                    <div className="w-12 h-12 rounded-full bg-red-600 flex items-center justify-center transform scale-75 group-hover:scale-100 transition-transform duration-300 shadow-xl shadow-red-900/50">
+                        <Play className="w-5 h-5 text-white ml-0.5 fill-current" />
+                    </div>
                 </div>
-                {anime.rating && (
-                    <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-md px-2 py-1 rounded-md flex items-center gap-1">
-                        <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
-                        <span className="text-xs text-white font-medium">{anime.rating}</span>
+
+                {/* High-Contrast Vibrant Star Rating Badge (Never camouflages on dark/light posters) */}
+                {formattedRating && (
+                    <div className="star-badge-vibrant absolute top-2 right-2 bg-black/90 backdrop-blur-md px-2 py-0.5 rounded-lg flex items-center gap-1 border border-amber-400/70 shadow-xl z-10">
+                        <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400 shrink-0 filter drop-shadow-sm" />
+                        <span className="text-[11px] font-black leading-none text-amber-300">{formattedRating}</span>
                     </div>
                 )}
-                {/* Progress Badge */}
+
+                {/* High-Contrast Progress Episode Badge */}
                 {anime.lastEpisode && (
-                    <div className="absolute top-2 left-2 bg-red-600/90 backdrop-blur-md px-2 py-1 rounded-md shadow-lg z-10">
-                        <span className="text-xs text-white font-bold">Ep {anime.lastEpisode}</span>
+                    <div className="episode-badge-red absolute top-2 left-2 bg-red-600 px-2 py-0.5 rounded-lg shadow-xl border border-red-400 z-10">
+                        <span className="text-[11px] font-black tracking-tight text-white">Ep {anime.lastEpisode}</span>
                     </div>
                 )}
             </div>
 
-            <div className="p-4">
-                <h3 className="text-white font-semibold truncate group-hover:text-red-500 transition-colors">
+            <div className="p-3.5 sm:p-4">
+                <h3 className="card-title text-white font-bold text-xs sm:text-sm truncate group-hover:text-red-500 transition-colors">
                     {displayTitle}
                 </h3>
-                <div className="flex items-center gap-2 mt-2 text-gray-400 text-xs text-nowrap overflow-hidden">
-                    <span>{anime.year || 2024}</span>
-                    <span className="w-1 h-1 rounded-full bg-gray-600"></span>
-                    <span className="truncate">{displayGenres}</span>
+                <div className="flex items-center gap-2 mt-2 text-xs font-medium text-nowrap overflow-hidden">
+                    <span className="card-year-badge px-2 py-0.5 rounded-md bg-white/10 text-white font-black text-[11px] border border-white/15 tracking-tight shrink-0 shadow-sm">
+                        {anime.year || 2024}
+                    </span>
+                    <span className="card-genres text-gray-300 truncate text-[11px] font-semibold">
+                        {displayGenres}
+                    </span>
                 </div>
             </div>
         </div>

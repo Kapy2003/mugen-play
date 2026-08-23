@@ -10,15 +10,50 @@
 
 @layer utilities {
   .animate-fade-in {
-    animation: fadeIn 0.3s ease-in-out;
+    animation: fadeIn 0.25s ease-out;
   }
 
   .animate-scale-in {
-    animation: scaleIn 0.2s ease-out;
+    animation: scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
   .animate-bounce-in {
     animation: bounceIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  }
+
+  .animate-slide-up-sm {
+    animation: slideUpSm 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* Hardware-accelerated 60fps micro-interactions */
+  .transform-gpu {
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    perspective: 1000px;
+  }
+
+  .active-spring:active {
+    transform: scale(0.96);
+    transition: transform 0.12s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .smooth-transition {
+    transition: background-color 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+                border-color 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+                color 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+                box-shadow 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+                transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* Touch fluidity and momentum */
+  .touch-pan-y {
+    touch-action: pan-y;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .touch-pan-x {
+    touch-action: pan-x;
+    -webkit-overflow-scrolling: touch;
   }
 
   /* Hide scrollbar but keep functionality */
@@ -29,6 +64,33 @@
   .no-scrollbar {
     -ms-overflow-style: none;
     scrollbar-width: none;
+  }
+
+  /* Custom thin scrollbar */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 9999px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
+  }
+
+  .light-theme .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.15);
+  }
+
+  .light-theme .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.3);
   }
 
   /* Hide Number Input Spinners */
@@ -55,6 +117,43 @@
   }
 }
 
+/* 60 FPS View Transition for Dark/Light Theme Switching */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 0.35s;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+::view-transition-old(root) {
+  animation-name: themeFadeOut;
+}
+
+::view-transition-new(root) {
+  animation-name: themeFadeIn;
+}
+
+@keyframes themeFadeOut {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.995);
+  }
+}
+
+@keyframes themeFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(1.005);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -66,11 +165,22 @@
 
 @keyframes scaleIn {
   from {
-    transform: scale(0.95);
+    transform: scale(0.96);
     opacity: 0;
   }
   to {
     transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes slideUpSm {
+  from {
+    transform: translateY(12px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
     opacity: 1;
   }
 }
@@ -100,6 +210,8 @@
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
     letter-spacing: -0.01em;
+    -webkit-tap-highlight-color: transparent;
+    transition: background-color 0.35s cubic-bezier(0.4, 0, 0.2, 1), color 0.35s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   h1, h2, h3, h4, h5, h6 {
@@ -127,15 +239,28 @@
   }
 }
 
-/* Light Theme High-Contrast Overrides */
+/* ==========================================================================
+   Light Theme Comprehensive High-Contrast & Zero-Black Overrides
+   ========================================================================== */
+
+/* Main Backgrounds */
 .light-theme .bg-\[\#0a0a0a\],
+.light-theme .bg-\[\#08080a\],
 .light-theme .bg-\[\#050505\],
 .light-theme .bg-gray-950 {
   background-color: #f8fafc !important;
 }
 
+/* Cards, Popovers, Modals & Surfaces */
 .light-theme .bg-gray-900,
-.light-theme .bg-\[\#0f0f0f\] {
+.light-theme .bg-\[\#0f0f0f\],
+.light-theme .bg-\[\#101014\],
+.light-theme .bg-\[\#111\],
+.light-theme .bg-gray-900\/80,
+.light-theme .bg-gray-900\/90,
+.light-theme .bg-gray-950\/60,
+.light-theme .bg-gray-950\/80,
+.light-theme .bg-gray-900\/30 {
   background-color: #ffffff !important;
   border-color: #e2e8f0 !important;
   color: #0f172a !important;
@@ -148,31 +273,676 @@
   color: #1e293b !important;
 }
 
-.light-theme .text-white {
+.light-theme .hover\:bg-gray-700:hover {
+  background-color: #e2e8f0 !important;
+}
+
+.light-theme .hover\:bg-gray-800:hover {
+  background-color: #f1f5f9 !important;
+}
+
+/* Modal Backdrops in Light Theme */
+.light-theme .fixed.inset-0.bg-black\/80,
+.light-theme .fixed.inset-0.bg-black\/70,
+.light-theme .fixed.inset-0.bg-black\/60 {
+  background-color: rgba(15, 23, 42, 0.45) !important;
+}
+
+/* Inputs & Form Elements */
+.light-theme input,
+.light-theme textarea,
+.light-theme select {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+.light-theme input::placeholder,
+.light-theme textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+/* White glass pills & buttons in Light Theme */
+.light-theme .bg-white\/5,
+.light-theme .bg-white\/10,
+.light-theme .bg-white\/15,
+.light-theme .bg-white\/20 {
+  background-color: #f1f5f9 !important;
+  border-color: #e2e8f0 !important;
+  color: #1e293b !important;
+}
+
+.light-theme .hover\:bg-white\/10:hover,
+.light-theme .hover\:bg-white\/20:hover {
+  background-color: #e2e8f0 !important;
   color: #0f172a !important;
 }
 
-.light-theme .text-gray-200 {
-  color: #334155 !important;
+/* Typography High-Contrast */
+.light-theme .text-white:not(.image-overlay-dark *):not(.star-badge-dark *):not(.episode-badge-red *):not(.episode-num-dark *):not(.hero-protected-text .text-white):not(.playback-episode-item.bg-red-600 *):not(.mobile-episode-item.bg-red-600 *) {
+  color: #0f172a !important;
+}
+
+.light-theme .text-gray-100 {
+  color: #0f172a !important;
+}
+
+.light-theme .text-gray-200:not(.hero-protected-text .text-gray-200) {
+  color: #1e293b !important;
 }
 
 .light-theme .text-gray-300 {
-  color: #475569 !important;
+  color: #334155 !important;
 }
 
 .light-theme .text-gray-400,
 .light-theme .text-gray-500 {
+  color: #475569 !important;
+}
+
+/* Protected Image Overlays, Badges, and Stars (Remain Dark Glass with Crisp Contrast in Both Themes) */
+.image-overlay-dark,
+.light-theme .image-overlay-dark {
+  background-color: rgba(0, 0, 0, 0.45) !important;
+  color: #ffffff !important;
+}
+
+.star-badge-vibrant,
+.light-theme .star-badge-vibrant {
+  background-color: rgba(8, 8, 12, 0.92) !important;
+  border-color: rgba(251, 191, 36, 0.8) !important;
+  color: #fde047 !important;
+}
+
+.star-badge-vibrant span,
+.light-theme .star-badge-vibrant span {
+  color: #fde047 !important;
+}
+
+.star-badge-dark,
+.light-theme .star-badge-dark {
+  background-color: rgba(15, 15, 20, 0.8) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  color: #ffffff !important;
+}
+
+.star-badge-dark span,
+.light-theme .star-badge-dark span {
+  color: #ffffff !important;
+}
+
+.episode-badge-red,
+.light-theme .episode-badge-red {
+  background-color: rgba(229, 9, 20, 0.95) !important;
+  border-color: rgba(239, 68, 68, 0.6) !important;
+  color: #ffffff !important;
+}
+
+.episode-badge-red span,
+.light-theme .episode-badge-red span {
+  color: #ffffff !important;
+}
+
+.episode-num-dark,
+.light-theme .episode-num-dark {
+  background-color: rgba(10, 10, 15, 0.85) !important;
+  color: #ffffff !important;
+}
+
+/* Card Year & Genre Badges */
+.card-year-badge {
+  background-color: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.light-theme .card-year-badge {
+  background-color: #e2e8f0 !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+.light-theme .card-genres {
+  color: #475569 !important;
+}
+
+/* Detail Modal & Playback Meta Pills */
+.modal-meta-pill,
+.playback-pill {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.light-theme .modal-meta-pill,
+.light-theme .playback-pill {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+/* Episode List Pagination Controls (High-Contrast in Both Themes) */
+.pagination-box {
+  background-color: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+}
+
+.pagination-box input {
+  color: #ffffff !important;
+}
+
+.pagination-divider {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.pagination-total {
+  color: #ffffff;
+}
+
+.pagination-btn {
+  background-color: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: #f1f5f9;
+}
+
+.pagination-btn:hover:not(:disabled) {
+  background-color: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+}
+
+.light-theme .pagination-box {
+  background-color: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+.light-theme .pagination-box input {
+  color: #0f172a !important;
+}
+
+.light-theme .pagination-divider {
   color: #64748b !important;
 }
 
+.light-theme .pagination-total {
+  color: #0f172a !important;
+}
+
+.light-theme .pagination-btn {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+.light-theme .pagination-btn:hover:not(:disabled) {
+  background-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+/* Playback Modal & Episode List in Light Theme */
+.light-theme .playback-modal {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+.light-theme .playback-topbar {
+  background-color: #ffffff !important;
+  border-bottom-color: #e2e8f0 !important;
+}
+
+.light-theme .playback-topbar h2,
+.light-theme .playback-topbar button {
+  color: #0f172a !important;
+}
+
+.light-theme .playback-episode-sidebar {
+  background-color: #ffffff !important;
+  border-left-color: #e2e8f0 !important;
+}
+
+.light-theme .playback-sidebar-header {
+  background-color: #ffffff !important;
+  border-bottom-color: #e2e8f0 !important;
+}
+
+.light-theme .playback-sidebar-header h3 {
+  color: #0f172a !important;
+}
+
+.light-theme .playback-episode-item:not(.bg-red-600),
+.light-theme .mobile-episode-item:not(.bg-red-600) {
+  background-color: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+.light-theme .playback-episode-item:not(.bg-red-600):hover,
+.light-theme .mobile-episode-item:not(.bg-red-600):hover {
+  background-color: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+}
+
+.light-theme .playback-episode-item:not(.bg-red-600) .text-white,
+.light-theme .mobile-episode-item:not(.bg-red-600) .font-bold {
+  color: #0f172a !important;
+}
+
+.light-theme .playback-episode-item:not(.bg-red-600) .text-gray-400,
+.light-theme .mobile-episode-item:not(.bg-red-600) .opacity-60 {
+  color: #64748b !important;
+  opacity: 1 !important;
+}
+
+.light-theme .playback-episode-item.bg-red-600,
+.light-theme .mobile-episode-item.bg-red-600 {
+  background-color: #e50914 !important;
+  color: #ffffff !important;
+  border-color: #b20710 !important;
+}
+
+.light-theme .playback-episode-item.bg-red-600 *,
+.light-theme .mobile-episode-item.bg-red-600 * {
+  color: #ffffff !important;
+}
+
+/* Borders */
 .light-theme .border-gray-800,
 .light-theme .border-gray-700,
 .light-theme .border-white\/10,
-.light-theme .border-white\/5 {
+.light-theme .border-white\/5,
+.light-theme .border-white\/15,
+.light-theme .border-white\/20,
+.light-theme .border-\[\#101014\] {
   border-color: #e2e8f0 !important;
 }
 
-.light-theme aside {
+/* Modal Banner Gradient Fixes for Light Theme */
+.light-theme .bg-gradient-to-t.from-\[\#101014\] {
+  background: linear-gradient(to top, #ffffff 0%, rgba(255, 255, 255, 0.95) 30%, rgba(255, 255, 255, 0.4) 65%, transparent 100%) !important;
+}
+
+.light-theme .bg-gradient-to-r.from-\[\#101014\] {
+  background: linear-gradient(to right, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.4) 50%, transparent 100%) !important;
+}
+
+/* Episode Card styling in Detail Modal */
+.light-theme .modal-episode-card {
   background-color: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+.light-theme .modal-episode-card:hover {
+  background-color: #f1f5f9 !important;
+  border-color: #ef4444 !important;
+}
+
+.light-theme .modal-episode-thumb {
+  background-color: #e2e8f0 !important;
+  border-color: #cbd5e1 !important;
+}
+
+.light-theme aside {
+  background-color: #ffffff !important;
   border-right-color: #e2e8f0 !important;
+}
+
+.light-theme nav {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+  border-top-color: #e2e8f0 !important;
+}
+
+.light-theme .bg-gradient-to-r.from-red-950\/40 {
+  background: linear-gradient(to right, rgba(239, 68, 68, 0.08), #ffffff, #ffffff) !important;
+  border-color: rgba(239, 68, 68, 0.2) !important;
+}
+
+/* ==========================================================================
+   Funny Anime Video Player Error / Dizzy Mascot Animations
+   ========================================================================== */
+
+@keyframes anime-panic-shake {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  10% { transform: translate(-3px, 1px) rotate(-1.5deg); }
+  20% { transform: translate(3px, -2px) rotate(2deg); }
+  30% { transform: translate(-4px, 2px) rotate(-1.5deg); }
+  40% { transform: translate(4px, -1px) rotate(1.5deg); }
+  50% { transform: translate(-2px, 3px) rotate(-2deg); }
+  60% { transform: translate(3px, 1px) rotate(1.5deg); }
+  70% { transform: translate(-3px, -1px) rotate(-1deg); }
+  80% { transform: translate(2px, 2px) rotate(1.5deg); }
+  90% { transform: translate(-1px, -2px) rotate(-1deg); }
+}
+
+@keyframes anime-spiral {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes anime-sweat-drip {
+  0% { transform: translateY(-6px) scale(0.6); opacity: 0; }
+  25% { transform: translateY(0px) scale(1.1); opacity: 1; }
+  70% { transform: translateY(8px) scale(1); opacity: 1; }
+  100% { transform: translateY(16px) scale(0.4); opacity: 0; }
+}
+
+@keyframes anime-antenna-twitch {
+  0%, 100% { transform: rotate(0deg); }
+  12% { transform: rotate(-10deg); }
+  25% { transform: rotate(8deg); }
+  38% { transform: rotate(-6deg); }
+  50% { transform: rotate(4deg); }
+  65% { transform: rotate(0deg); }
+}
+
+@keyframes anime-orbit-dizzy {
+  0% { transform: rotate(0deg) translateX(24px) rotate(0deg); }
+  100% { transform: rotate(360deg) translateX(24px) rotate(-360deg); }
+}
+
+.animate-anime-panic {
+  animation: anime-panic-shake 2.2s infinite ease-in-out;
+  transform-origin: center bottom;
+}
+
+.animate-anime-spiral {
+  animation: anime-spiral 3.5s linear infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.animate-anime-sweat {
+  animation: anime-sweat-drip 1.5s infinite ease-in;
+  transform-box: fill-box;
+  transform-origin: top center;
+}
+
+.animate-anime-antenna {
+  animation: anime-antenna-twitch 2.8s infinite ease-in-out;
+  transform-box: fill-box;
+  transform-origin: bottom center;
+}
+
+.animate-anime-orbit {
+  animation: anime-orbit-dizzy 3.2s linear infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+/* Hero Carousel Text Protection: Deep Black Glass Fade (No Muddy Grey) */
+.light-theme .bg-gradient-to-t.from-gray-950 {
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.88) 0%, rgba(0, 0, 0, 0.45) 45%, rgba(0, 0, 0, 0.1) 75%, transparent 100%) !important;
+}
+
+.light-theme .bg-gradient-to-t.from-gray-950 .text-white,
+.light-theme .hero-protected-text .text-white,
+.light-theme .hero-protected-text h1 {
+  color: #ffffff !important;
+}
+
+.light-theme .bg-gradient-to-t.from-gray-950 .text-gray-200,
+.light-theme .hero-protected-text .text-gray-200,
+.light-theme .hero-protected-text p {
+  color: #f1f5f9 !important;
+}
+
+/* Extension Tab Zero-Black Light Theme Rules */
+.light-theme .extension-card {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  color: #0f172a !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05) !important;
+}
+
+.light-theme .extension-card h3 {
+  color: #0f172a !important;
+}
+
+.light-theme .extension-card-metadata {
+  background: linear-gradient(135deg, rgba(2, 169, 255, 0.08), #ffffff) !important;
+  border-color: #93c5fd !important;
+}
+
+.light-theme .extension-card-disabled {
+  background-color: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+}
+
+.light-theme .extension-add-card {
+  background-color: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: #64748b !important;
+}
+
+.light-theme .extension-add-card:hover {
+  background-color: #f1f5f9 !important;
+  border-color: #ef4444 !important;
+  color: #0f172a !important;
+}
+
+/* Settings Developer Options Light Theme Rules */
+.light-theme .settings-card {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+.light-theme .settings-card h3,
+.light-theme .settings-card h4 {
+  color: #0f172a !important;
+}
+
+.light-theme .settings-subcard {
+  background-color: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+.light-theme .settings-codebox {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+/* Minimized Player Controls Light Theme Rules */
+.light-theme .minimized-player-overlay {
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.4) 60%, transparent 100%) !important;
+}
+
+.light-theme .minimized-btn {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Homepage Carousel Buttons Light Theme */
+.light-theme .carousel-nav-btn {
+  background-color: rgba(255, 255, 255, 0.8) !important;
+  color: #0f172a !important;
+  border-color: rgba(0, 0, 0, 0.15) !important;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1) !important;
+}
+
+.light-theme .carousel-nav-btn:hover {
+  background-color: #ffffff !important;
+  color: #ef4444 !important;
+  border-color: #ef4444 !important;
+}
+
+.light-theme .carousel-info-btn {
+  background-color: rgba(15, 23, 42, 0.6) !important;
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.25) !important;
+}
+
+.light-theme .carousel-info-btn:hover {
+  background-color: rgba(15, 23, 42, 0.85) !important;
+  border-color: rgba(255, 255, 255, 0.4) !important;
+}
+
+/* Continue Watching Cross Button Light Theme */
+.light-theme .continue-watching-cross {
+  background-color: rgba(255, 255, 255, 0.9) !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15) !important;
+}
+
+.light-theme .continue-watching-cross:hover {
+  background-color: #ef4444 !important;
+  color: #ffffff !important;
+  border-color: #dc2626 !important;
+}
+
+/* Legal Disclaimer Modal Light Theme */
+.light-theme .legal-modal-card {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25) !important;
+}
+
+.light-theme .legal-modal-header {
+  background: linear-gradient(to right, rgba(239, 68, 68, 0.08), #ffffff, #ffffff) !important;
+  border-bottom-color: #e2e8f0 !important;
+}
+
+.light-theme .legal-modal-header h2 {
+  color: #0f172a !important;
+}
+
+.light-theme .legal-modal-header p {
+  color: #64748b !important;
+}
+
+.light-theme .legal-modal-notice {
+  background-color: #fef2f2 !important;
+  border-color: #fecaca !important;
+  color: #991b1b !important;
+}
+
+.light-theme .legal-modal-body p {
+  color: #334155 !important;
+}
+
+.light-theme .legal-modal-body strong {
+  color: #0f172a !important;
+}
+
+.light-theme .legal-modal-footer {
+  background-color: #f8fafc !important;
+  border-top-color: #e2e8f0 !important;
+}
+
+.light-theme .legal-modal-btn-cancel {
+  background-color: #f1f5f9 !important;
+  color: #475569 !important;
+  border-color: #cbd5e1 !important;
+}
+
+.light-theme .legal-modal-btn-cancel:hover {
+  background-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+/* Extension Store Modal Light Theme */
+.light-theme .store-modal-card {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25) !important;
+}
+
+.light-theme .store-modal-header {
+  background-color: #ffffff !important;
+  border-bottom-color: #e2e8f0 !important;
+}
+
+.light-theme .store-modal-header h2 {
+  color: #0f172a !important;
+}
+
+.light-theme .store-modal-header p {
+  color: #64748b !important;
+}
+
+.light-theme .store-modal-filters {
+  background-color: #f8fafc !important;
+  border-bottom-color: #e2e8f0 !important;
+}
+
+.light-theme .store-input {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+.light-theme .store-select {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+.light-theme .store-btn {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #475569 !important;
+}
+
+.light-theme .store-item-card {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05) !important;
+}
+
+.light-theme .store-item-card:hover {
+  background-color: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+}
+
+.light-theme .store-item-card-rec {
+  background: linear-gradient(to bottom, #ffffff, #fff5f5) !important;
+  border-color: #fca5a5 !important;
+}
+
+.light-theme .store-item-card h3 {
+  color: #0f172a !important;
+}
+
+.light-theme .store-item-card p {
+  color: #64748b !important;
+}
+
+/* Mascot Screen Light Theme Rules */
+.light-theme .mascot-screen-container {
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%) !important;
+  color: #0f172a !important;
+}
+
+.light-theme .mascot-badge {
+  background-color: #fef2f2 !important;
+  color: #b91c1c !important;
+  border-color: #fca5a5 !important;
+  box-shadow: 0 2px 4px rgba(239, 68, 68, 0.1) !important;
+}
+
+.light-theme .mascot-title {
+  color: #0f172a !important;
+  text-shadow: none !important;
+}
+
+.light-theme .mascot-subtitle {
+  color: #334155 !important;
+  text-shadow: none !important;
+}
+
+.light-theme .mascot-retry-btn {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+.light-theme .mascot-retry-btn:hover {
+  background-color: #e2e8f0 !important;
+  border-color: #94a3b8 !important;
 }

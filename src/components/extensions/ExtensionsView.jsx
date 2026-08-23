@@ -120,14 +120,14 @@ const ExtensionsView = ({
                         <div
                             key={ext.id}
                             className={`
-                  p-6 rounded-2xl border transition-all duration-300
+                  p-6 rounded-2xl border transition-all duration-300 extension-card
                   ${isDead
-                                    ? 'bg-red-950/20 border-red-900/50 shadow-lg shadow-red-950/20'
+                                    ? 'extension-card-dead bg-red-950/20 border-red-900/50 shadow-lg shadow-red-950/20'
                                     : isMetadata
-                                        ? 'bg-gradient-to-br from-[#02A9FF]/10 to-gray-900 border-[#02A9FF]/30 shadow-lg shadow-black/50'
+                                        ? 'extension-card-metadata bg-gradient-to-br from-[#02A9FF]/10 to-gray-900 border-[#02A9FF]/30 shadow-lg shadow-black/50'
                                         : ext.enabled
                                             ? 'bg-gray-900 border-gray-700 shadow-lg shadow-black/50'
-                                            : 'bg-gray-900/50 border-gray-800 opacity-75 grayscale'
+                                            : 'extension-card-disabled bg-gray-900/50 border-gray-800 opacity-75 grayscale'
                                 }
                 `}
                         >
@@ -239,7 +239,7 @@ const ExtensionsView = ({
                 {/* Add Source Card */}
                 <button
                     onClick={onAddSource}
-                    className="p-6 rounded-2xl border-2 border-dashed border-gray-800 hover:border-red-500/50 bg-gray-900/30 hover:bg-red-500/5 transition-all duration-300 flex flex-col items-center justify-center gap-3 text-gray-500 hover:text-white min-h-[190px] group cursor-pointer"
+                    className="extension-add-card p-6 rounded-2xl border-2 border-dashed border-gray-800 hover:border-red-500/50 bg-gray-900/30 hover:bg-red-500/5 transition-all duration-300 flex flex-col items-center justify-center gap-3 text-gray-500 hover:text-white min-h-[190px] group cursor-pointer"
                 >
                     <div className="w-12 h-12 rounded-xl bg-gray-800 group-hover:bg-red-600/20 group-hover:text-red-500 flex items-center justify-center transition-colors">
                         <Plus className="w-6 h-6" />

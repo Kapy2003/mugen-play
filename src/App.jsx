@@ -14,7 +14,7 @@ import Toast from './components/common/Toast';
 import SplashScreen from './components/common/SplashScreen';
 import LegalDisclaimerModal from './components/common/LegalDisclaimerModal';
 import { INITIAL_EXTENSIONS } from './data/constants';
-import { Search, Play, ArrowLeft, X, Maximize2, PanelRight, Filter, Compass, Shuffle, Star, Heart, Code, Sliders, Link, Copy, ExternalLink, Sun, Moon, Key, Lock, ChevronRight, Film, Flame, Trophy, RotateCcw } from 'lucide-react';
+import { Search, Play, ArrowLeft, X, Maximize2, PanelRight, Filter, Compass, Shuffle, Star, Heart, Code, Sliders, Link, Copy, Sun, Moon, Key, Lock, ChevronRight, Film, Flame, Trophy, RotateCcw } from 'lucide-react';
 import { AnilistSource } from './extensions/AnilistSource';
 import HeroCarousel from './components/home/HeroCarousel';
 import HorizontalScrollList from './components/common/HorizontalScrollList';
@@ -226,7 +226,13 @@ function App() {
 
     const toggleTheme = () => {
         const next = theme === 'light' ? 'dark' : 'light';
-        setTheme(next);
+        if (typeof document !== 'undefined' && document.startViewTransition) {
+            document.startViewTransition(() => {
+                setTheme(next);
+            });
+        } else {
+            setTheme(next);
+        }
         showToast(`Switched to ${next === 'light' ? 'Light' : 'Dark'} Mode`, 'info');
     };
 
@@ -473,11 +479,10 @@ function App() {
 
     const handlePlay = async (anime, episodeNumber = null, overrideSource = null) => {
         try {
-            // Find target video streaming extension (exclude metadata providers like AniList)
-            const targetExt = (overrideSource && extensions.find(e => e.id === overrideSource && e.type !== 'metadata'))
+            // Find target video streaming extension (exclude metadata providers like AniList and ensure enabled !== false)
+            const targetExt = (overrideSource && extensions.find(e => e.id === overrideSource && e.type !== 'metadata' && e.enabled !== false))
                 || extensions.find(e => e.id === playbackSource && e.type !== 'metadata' && e.id !== 'anilist_source' && e.enabled !== false)
                 || extensions.find(e => e.type !== 'metadata' && e.id !== 'anilist_source' && e.enabled !== false)
-                || extensions.find(e => e.type !== 'metadata' && e.id !== 'anilist_source')
                 || null;
 
             const effectiveSource = targetExt ? targetExt.id : (overrideSource || playbackSource || '');
@@ -656,21 +661,35 @@ function App() {
         const target = extensions.find(e => e.id === id);
         if (!target) return;
 
-        // Prevent disabling the last enabled source
-        if (target.enabled && target.type === 'source') {
-            const enabledSources = extensions.filter(e => e.type === 'source' && e.enabled);
-            if (enabledSources.length <= 1) {
-                showToast('Cannot disable the only source provider', 'error');
-                return;
-            }
-        }
-
-        setExtensions(extensions.map(ext => {
+        const isDisabling = target.enabled !== false;
+        const updated = extensions.map(ext => {
             if (ext.id === id) {
                 return { ...ext, enabled: !ext.enabled };
             }
             return ext;
-        }));
+        });
+
+        saveExtensions(updated);
+        showToast(`${target.name} ${isDisabling ? 'disabled' : 'enabled'}`, 'success');
+
+        // If disabling the current streaming extension, immediately update player
+        if (isDisabling && playingAnime) {
+            const activeEnabledExt = updated.find(e => e.type !== 'metadata' && e.id !== 'anilist_source' && e.enabled !== false);
+            if (!activeEnabledExt) {
+                // No active streaming extension -> clear stream URL to trigger mascot
+                setPlayingAnime(prev => prev ? {
+                    ...prev,
+                    url: '',
+                    streamUrl: '',
+                    source: ''
+                } : null);
+            } else if (playbackSource === id) {
+                // Switch to next available enabled extension
+                setPlaybackSource(activeEnabledExt.id);
+                localStorage.setItem('mugen_playback_source', activeEnabledExt.id);
+                handlePlay(playingAnime, playingAnime.currentEpisode || 1, activeEnabledExt.id);
+            }
+        }
     };
 
     const handleSearch = (e) => {
@@ -1120,7 +1139,7 @@ function App() {
                                     </div>
                                 </div>
                             ) : (
-                                <div className="bg-gray-900 p-6 rounded-xl border border-gray-800 space-y-6 animate-fade-in">
+                                <div className="settings-card bg-gray-900 p-6 rounded-xl border border-gray-800 space-y-6 animate-fade-in">
                                     <div className="flex items-center justify-between">
                                         <div>
                                             <h3 className="text-lg font-medium text-white flex items-center gap-2">
@@ -1160,10 +1179,10 @@ function App() {
                                     <div className="pt-4 border-t border-gray-800 space-y-4">
                                         <h4 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
                                             <Sliders className="w-4 h-4 text-gray-400" />
-                                            Viewport Calibration (Desktop: -72px | Mobile: -62px | Mini: -50px)
+                                            Viewport Calibration (Desktop: 0px / -72px | Mobile: -62px | Mini: -50px)
                                         </h4>
                                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                            <div className="p-3 bg-black/40 border border-gray-800 rounded-xl space-y-2">
+                                            <div className="settings-subcard p-3 bg-black/40 border border-gray-800 rounded-xl space-y-2">
                                                 <div className="flex justify-between text-xs text-gray-400">
                                                     <span>Max Player Vertical Offset</span>
                                                     <span className="font-mono text-amber-400 font-bold">{videoYOffset}px</span>
@@ -1186,9 +1205,19 @@ function App() {
                                                 <div className="flex flex-wrap gap-1.5 pt-1">
                                                     <button
                                                         onClick={() => {
+                                                            setVideoYOffset(0);
+                                                            localStorage.setItem('mugen_video_y_offset', '0');
+                                                            showToast("Max Player Offset set to 0px (Standard Live View)", "success");
+                                                        }}
+                                                        className={`px-2 py-1 rounded text-[11px] font-medium transition-colors cursor-pointer border ${videoYOffset === 0 ? 'bg-amber-500 text-black font-bold border-amber-500' : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border-amber-500/20'}`}
+                                                    >
+                                                        Default: 0px
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
                                                             setVideoYOffset(-72);
                                                             localStorage.setItem('mugen_video_y_offset', '-72');
-                                                            showToast("Max Player Offset set to -72px (Desktop)", "success");
+                                                            showToast("Max Player Offset set to -72px (Desktop Crop)", "success");
                                                         }}
                                                         className={`px-2 py-1 rounded text-[11px] font-medium transition-colors cursor-pointer border ${videoYOffset === -72 ? 'bg-amber-500 text-black font-bold border-amber-500' : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border-amber-500/20'}`}
                                                     >
@@ -1198,7 +1227,7 @@ function App() {
                                                         onClick={() => {
                                                             setVideoYOffset(-62);
                                                             localStorage.setItem('mugen_video_y_offset', '-62');
-                                                            showToast("Max Player Offset set to -62px (Mobile)", "success");
+                                                            showToast("Max Player Offset set to -62px (Mobile Crop)", "success");
                                                         }}
                                                         className={`px-2 py-1 rounded text-[11px] font-medium transition-colors cursor-pointer border ${videoYOffset === -62 ? 'bg-amber-500 text-black font-bold border-amber-500' : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border-amber-500/20'}`}
                                                     >
@@ -1230,19 +1259,10 @@ function App() {
                                                     >
                                                         Mobile Mini: -62px / 92%
                                                     </button>
-                                                    <button
-                                                        onClick={() => {
-                                                            setVideoYOffset(0);
-                                                            localStorage.setItem('mugen_video_y_offset', '0');
-                                                        }}
-                                                        className="px-2 py-1 bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white rounded text-[11px] transition-colors cursor-pointer"
-                                                    >
-                                                        Reset: 0px
-                                                    </button>
                                                 </div>
                                             </div>
 
-                                            <div className="p-3 bg-black/40 border border-gray-800 rounded-xl space-y-2">
+                                            <div className="settings-subcard p-3 bg-black/40 border border-gray-800 rounded-xl space-y-2">
                                                 <div className="flex justify-between text-xs text-gray-400">
                                                     <span>Player Zoom Level</span>
                                                     <span className="font-mono text-amber-400 font-bold">{Math.round(videoScale * 100)}%</span>
@@ -1295,8 +1315,8 @@ function App() {
                                             <Link className="w-4 h-4 text-gray-400" />
                                             Active Stream Link Debugger
                                         </h4>
-                                        <div className="p-3 bg-black/50 border border-gray-800 rounded-xl space-y-3">
-                                            <div className="text-xs text-gray-400 font-mono break-all bg-black/40 p-2.5 rounded-lg border border-white/5">
+                                        <div className="settings-subcard p-3 bg-black/50 border border-gray-800 rounded-xl space-y-3">
+                                            <div className="settings-codebox text-xs text-gray-400 font-mono break-all bg-black/40 p-2.5 rounded-lg border border-white/5">
                                                 <span className="text-gray-500 font-sans block mb-1">Loaded Stream URL:</span>
                                                 {playingAnime?.url || playingAnime?.streamUrl || 'No anime currently playing'}
                                             </div>
@@ -1313,15 +1333,6 @@ function App() {
                                                         className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-white rounded-lg text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
                                                     >
                                                         <Copy size={13} /> Copy Link
-                                                    </button>
-                                                    <button
-                                                        onClick={() => {
-                                                            const url = playingAnime.url || playingAnime.streamUrl;
-                                                            if (url) window.open(url, '_blank');
-                                                        }}
-                                                        className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-white rounded-lg text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
-                                                    >
-                                                        <ExternalLink size={13} /> Open in Browser Tab
                                                     </button>
                                                 </div>
                                             )}
@@ -1479,15 +1490,15 @@ function App() {
                                         items={watchHistory.filter(i => i && i.id)}
                                         onItemClick={(anime) => handlePlay(anime)}
                                         renderItem={(anime) => (
-                                            <div className="min-w-[160px] w-[160px] sm:min-w-[200px] sm:w-[200px] flex-shrink-0 cursor-pointer group relative">
-                                                <div className="aspect-video rounded-xl overflow-hidden mb-2 relative bg-gray-900 border border-white/10">
+                                            <div className="min-w-[160px] w-[160px] sm:min-w-[210px] sm:w-[210px] flex-shrink-0 cursor-pointer group relative">
+                                                <div className="aspect-video rounded-xl overflow-hidden mb-2 relative bg-gray-900 border border-gray-800">
                                                     <img
                                                         src={anime.bannerUrl || anime.coverUrl}
                                                         alt={formatAnimeTitle(anime.title)}
-                                                        className="w-full h-full object-cover pointer-events-none group-hover:scale-105 transition-transform duration-300 opacity-80 group-hover:opacity-100"
+                                                        className="w-full h-full object-cover pointer-events-none group-hover:scale-105 transition-transform duration-300 opacity-85 group-hover:opacity-100"
                                                     />
                                                     <div className="absolute inset-0 flex items-center justify-center">
-                                                        <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center group-hover:bg-red-600 transition-colors">
+                                                        <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white/25 backdrop-blur-sm flex items-center justify-center group-hover:bg-red-600 transition-colors shadow-lg">
                                                             <Play className="w-4 h-4 sm:w-5 sm:h-5 text-white fill-current ml-0.5" />
                                                         </div>
                                                     </div>
@@ -1502,25 +1513,29 @@ function App() {
                                                         </div>
                                                     )}
 
-                                                    {/* Episode Badge Overlay */}
-                                                    <div className="absolute top-2 left-2 px-2 py-0.5 rounded bg-black/60 backdrop-blur text-[10px] sm:text-xs font-bold text-white">
+                                                    {/* High-Contrast Episode Badge */}
+                                                    <div className="episode-badge-red absolute top-2 left-2 px-2 py-0.5 rounded-md bg-red-600 border border-red-400 text-[10px] sm:text-xs font-black text-white shadow-lg">
                                                         Ep {anime.lastEpisode || 1}
                                                     </div>
 
-                                                    {/* Remove from Continue Watching Cross Button */}
+                                                    {/* Remove Cross Button */}
                                                     <button
                                                         onClick={(e) => {
                                                             e.stopPropagation();
                                                             removeFromHistory(anime.id);
                                                         }}
-                                                        className="absolute top-2 right-2 z-20 w-6 h-6 rounded-full bg-black/80 hover:bg-red-600 text-gray-200 hover:text-white flex items-center justify-center backdrop-blur-md opacity-90 sm:opacity-0 sm:group-hover:opacity-100 transition-all cursor-pointer shadow-md active:scale-90 border border-white/10"
+                                                        className="continue-watching-cross absolute top-2 right-2 z-20 w-6 h-6 rounded-full bg-black/80 hover:bg-red-600 text-gray-200 hover:text-white flex items-center justify-center backdrop-blur-md opacity-90 sm:opacity-0 sm:group-hover:opacity-100 transition-all cursor-pointer shadow-md active:scale-90 border border-white/10"
                                                         title="Remove from Continue Watching"
                                                     >
                                                         <X size={13} />
                                                     </button>
                                                 </div>
-                                                <h3 className="text-xs sm:text-sm font-medium text-white truncate">{formatAnimeTitle(anime.title)}</h3>
-                                                <p className="text-[11px] sm:text-xs text-gray-400">Episode {anime.lastEpisode}</p>
+                                                <h3 className="text-xs sm:text-sm font-bold text-white truncate">{formatAnimeTitle(anime.title)}</h3>
+                                                <div className="flex items-center gap-1.5 mt-1">
+                                                    <span className="card-year-badge px-1.5 py-0.5 rounded text-[10px] font-black">
+                                                        Episode {anime.lastEpisode || 1}
+                                                    </span>
+                                                </div>
                                             </div>
                                         )}
                                     />
@@ -1533,24 +1548,8 @@ function App() {
                                     items={trendingList}
                                     onItemClick={(anime) => setSelectedAnime(anime)}
                                     renderItem={(anime) => (
-                                        <div className="min-w-[130px] w-[130px] sm:min-w-[160px] sm:w-[160px] flex-shrink-0 cursor-pointer group relative">
-                                            <div className="aspect-[2/3] rounded-xl overflow-hidden mb-2 relative bg-gray-900 border border-gray-800">
-                                                <img
-                                                    src={anime.coverUrl || anime.image || anime.poster || ''}
-                                                    alt={formatAnimeTitle(anime.title)}
-                                                    className="w-full h-full object-cover pointer-events-none group-hover:scale-105 transition-transform duration-300"
-                                                />
-                                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                                    <Play className="w-7 h-7 sm:w-8 sm:h-8 text-white fill-white" />
-                                                </div>
-                                                {anime.rating > 0 && (
-                                                    <div className="absolute top-2 right-2 bg-black/70 backdrop-blur-md px-1.5 py-0.5 rounded-md flex items-center gap-1">
-                                                        <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
-                                                        <span className="text-[10px] sm:text-xs text-white font-bold">{anime.rating}</span>
-                                                    </div>
-                                                )}
-                                            </div>
-                                            <h3 className="text-xs sm:text-sm font-medium text-white truncate">{formatAnimeTitle(anime.title)}</h3>
+                                        <div className="min-w-[135px] w-[135px] sm:min-w-[170px] sm:w-[170px] flex-shrink-0">
+                                            <AnimeCard anime={anime} onClick={setSelectedAnime} />
                                         </div>
                                     )}
                                 />
@@ -1562,23 +1561,8 @@ function App() {
                                     items={popularList}
                                     onItemClick={(anime) => setSelectedAnime(anime)}
                                     renderItem={(anime) => (
-                                        <div className="min-w-[130px] w-[130px] sm:min-w-[160px] sm:w-[160px] flex-shrink-0 cursor-pointer group relative">
-                                            <div className="aspect-[2/3] rounded-xl overflow-hidden mb-2 relative bg-gray-900 border border-gray-800">
-                                                <img
-                                                    src={anime.coverUrl || anime.image || anime.poster || ''}
-                                                    alt={formatAnimeTitle(anime.title)}
-                                                    className="w-full h-full object-cover pointer-events-none group-hover:scale-105 transition-transform duration-300"
-                                                />
-                                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                                    <Play className="w-7 h-7 sm:w-8 sm:h-8 text-white fill-white" />
-                                                </div>
-                                                {anime.year && (
-                                                    <div className="absolute top-2 left-2 bg-black/70 backdrop-blur-md px-1.5 py-0.5 rounded-md">
-                                                        <span className="text-[10px] sm:text-xs text-gray-300 font-bold">{anime.year}</span>
-                                                    </div>
-                                                )}
-                                            </div>
-                                            <h3 className="text-xs sm:text-sm font-medium text-white truncate">{formatAnimeTitle(anime.title)}</h3>
+                                        <div className="min-w-[135px] w-[135px] sm:min-w-[170px] sm:w-[170px] flex-shrink-0">
+                                            <AnimeCard anime={anime} onClick={setSelectedAnime} />
                                         </div>
                                     )}
                                 />
@@ -1590,24 +1574,8 @@ function App() {
                                     items={topRatedList}
                                     onItemClick={(anime) => setSelectedAnime(anime)}
                                     renderItem={(anime) => (
-                                        <div className="min-w-[130px] w-[130px] sm:min-w-[160px] sm:w-[160px] flex-shrink-0 cursor-pointer group relative">
-                                            <div className="aspect-[2/3] rounded-xl overflow-hidden mb-2 relative bg-gray-900 border border-gray-800">
-                                                <img
-                                                    src={anime.coverUrl || anime.image || anime.poster || ''}
-                                                    alt={formatAnimeTitle(anime.title)}
-                                                    className="w-full h-full object-cover pointer-events-none group-hover:scale-105 transition-transform duration-300"
-                                                />
-                                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                                    <Play className="w-7 h-7 sm:w-8 sm:h-8 text-white fill-white" />
-                                                </div>
-                                                {anime.rating > 0 && (
-                                                    <div className="absolute top-2 right-2 bg-black/70 backdrop-blur-md px-1.5 py-0.5 rounded-md flex items-center gap-1">
-                                                        <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
-                                                        <span className="text-[10px] sm:text-xs text-white font-bold">{anime.rating}</span>
-                                                    </div>
-                                                )}
-                                            </div>
-                                            <h3 className="text-xs sm:text-sm font-medium text-white truncate">{formatAnimeTitle(anime.title)}</h3>
+                                        <div className="min-w-[135px] w-[135px] sm:min-w-[170px] sm:w-[170px] flex-shrink-0">
+                                            <AnimeCard anime={anime} onClick={setSelectedAnime} />
                                         </div>
                                     )}
                                 />
@@ -1620,18 +1588,8 @@ function App() {
                                         items={favorites}
                                         onItemClick={(anime) => setSelectedAnime(anime)}
                                         renderItem={(anime) => (
-                                            <div className="min-w-[130px] w-[130px] sm:min-w-[160px] sm:w-[160px] flex-shrink-0 cursor-pointer group relative">
-                                                <div className="aspect-[2/3] rounded-xl overflow-hidden mb-2 relative bg-gray-900 border border-gray-800">
-                                                    <img
-                                                        src={anime.coverUrl || anime.image || anime.poster || ''}
-                                                        alt={formatAnimeTitle(anime.title)}
-                                                        className="w-full h-full object-cover pointer-events-none group-hover:scale-105 transition-transform duration-300"
-                                                    />
-                                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                                        <Play className="w-7 h-7 sm:w-8 sm:h-8 text-white fill-white" />
-                                                    </div>
-                                                </div>
-                                                <h3 className="text-xs sm:text-sm font-medium text-white truncate">{formatAnimeTitle(anime.title)}</h3>
+                                            <div className="min-w-[135px] w-[135px] sm:min-w-[170px] sm:w-[170px] flex-shrink-0">
+                                                <AnimeCard anime={anime} onClick={setSelectedAnime} />
                                             </div>
                                         )}
                                     />
@@ -1677,8 +1635,6 @@ function App() {
                 setIsMobileOpen={setIsMobileOpen}
                 searchQuery={searchQuery}
                 onSearch={setSearchQuery}
-                onOpenDirectPlay={() => setShowDirectPlay(true)}
-
                 width={sidebarWidth}
                 setWidth={setSidebarWidth}
                 collapsed={isSidebarCollapsed}
@@ -1697,11 +1653,11 @@ function App() {
                     <div
                         onTouchStart={handlePlayerTouchStart}
                         onTouchEnd={handlePlayerTouchEnd}
-                        className={`fixed z-50 bg-[#0a0a0a] text-white flex flex-col font-sans transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] shadow-2xl overflow-hidden ${isPlayerMinimized ? 'bottom-20 sm:bottom-6 right-3 sm:right-6 w-[calc(100vw-24px)] sm:w-96 h-48 sm:h-56 rounded-2xl border border-white/10 ring-1 ring-black/50 shadow-2xl' : 'inset-0 rounded-none'}`}
+                        className={`fixed z-50 bg-[#0a0a0a] playback-modal text-white flex flex-col font-sans transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] shadow-2xl overflow-hidden ${isPlayerMinimized ? 'bottom-20 sm:bottom-6 right-3 sm:right-6 w-[calc(100vw-24px)] sm:w-96 h-48 sm:h-56 rounded-2xl border border-white/10 ring-1 ring-black/50 shadow-2xl' : 'inset-0 rounded-none'}`}
                     >
                         {/* Top Navigation Bar (Full Screen Only) */}
                         {!isPlayerMinimized && (
-                            <div className="h-16 flex items-center justify-between px-4 sm:px-6 bg-[#050505] border-b border-white/5 z-20 gap-3 sm:gap-4 animate-fade-in shrink-0">
+                            <div className="h-16 flex items-center justify-between px-4 sm:px-6 bg-[#050505] playback-topbar border-b border-white/5 z-20 gap-3 sm:gap-4 animate-fade-in shrink-0">
                                 <div className="flex items-center gap-2 flex-1 min-w-0">
                                     <button
                                         onClick={() => setIsPlayerMinimized(true)}
@@ -1772,16 +1728,25 @@ function App() {
                                         }}
                                         onToggleMinimize={() => setIsPlayerMinimized(true)}
                                         onClose={() => setPlayingAnime(null)}
+                                        onOpenExtensionStore={() => {
+                                            setActiveTab('extensions');
+                                            setPlayingAnime(null);
+                                        }}
+                                        onRetry={async () => {
+                                            if (playingAnime) {
+                                                await handlePlay(playingAnime, playingAnime.currentEpisode || 1);
+                                            }
+                                        }}
                                     />
                                     {/* Mini Overlay Controls */}
                                     {isPlayerMinimized && (
-                                        <div className="absolute top-0 left-0 right-0 p-2.5 flex justify-end gap-2 bg-gradient-to-b from-black/85 via-black/40 to-transparent z-[120] pointer-events-auto opacity-100 sm:opacity-90 sm:hover:opacity-100 transition-opacity">
+                                        <div className="minimized-player-overlay absolute top-0 left-0 right-0 p-2.5 flex justify-end gap-2 bg-gradient-to-b from-black/85 via-black/40 to-transparent z-[120] pointer-events-auto opacity-100 sm:opacity-90 sm:hover:opacity-100 transition-opacity">
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                     setIsPlayerMinimized(false);
                                                 }}
-                                                className="p-2 bg-black/80 hover:bg-black text-white rounded-full backdrop-blur-md transition-all hover:scale-110 shadow-lg border border-white/20 cursor-pointer"
+                                                className="minimized-btn p-2 bg-black/80 hover:bg-black text-white rounded-full backdrop-blur-md transition-all hover:scale-110 shadow-lg border border-white/20 cursor-pointer"
                                                 title="Expand Player"
                                             >
                                                 <Maximize2 size={16} />
@@ -1806,11 +1771,25 @@ function App() {
                                         <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 items-start">
                                             <img src={playingAnime.coverUrl} alt="Cover" className="w-24 sm:w-36 rounded-2xl shadow-2xl hidden sm:block border border-white/10 shrink-0" />
                                             <div className="flex-1 space-y-2 sm:space-y-3">
-                                                <h1 className="text-xl sm:text-3xl font-black leading-tight tracking-tight text-white">{playingAnime.title}</h1>
-                                                <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs sm:text-sm text-gray-300 font-medium">
-                                                    <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-yellow-500/10 text-yellow-400 border border-yellow-500/20"><Star size={14} className="fill-current" /> {playingAnime.rating || '85'}</span>
-                                                    <span>•</span><span>{playingAnime.year || 2024}</span><span>•</span><span>{playingAnime.episodes || 12} Episodes</span>
-                                                    <div className="flex flex-wrap gap-1.5 ml-1 sm:ml-2">{playingAnime.genres?.slice(0, 3).map(g => <span key={g} className="px-2.5 py-0.5 bg-red-600/10 border border-red-500/20 text-red-400 rounded-full text-xs font-semibold">{g}</span>)}</div>
+                                                <h1 className="text-xl sm:text-3xl font-black leading-tight tracking-tight text-white mb-2">{playingAnime.title}</h1>
+                                                <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs sm:text-sm font-bold">
+                                                    <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/60 font-black shadow-sm">
+                                                        <Star size={14} className="fill-amber-400 text-amber-400 shrink-0" />
+                                                        {playingAnime.rating ? (playingAnime.rating > 10 ? (playingAnime.rating / 10).toFixed(1) : Number(playingAnime.rating).toFixed(1)) : '8.5'}
+                                                    </span>
+                                                    <span className="playback-pill px-3 py-1 rounded-full bg-white/10 border border-white/20 text-white font-bold">
+                                                        {playingAnime.year || 2024}
+                                                    </span>
+                                                    <span className="playback-pill px-3 py-1 rounded-full bg-white/10 border border-white/20 text-white font-bold">
+                                                        {playingAnime.episodes || 12} Episodes
+                                                    </span>
+                                                    <div className="flex flex-wrap gap-1.5 ml-1">
+                                                        {playingAnime.genres?.slice(0, 3).map(g => (
+                                                            <span key={g} className="px-2.5 py-0.5 bg-red-600/15 border border-red-500/30 text-red-400 rounded-full text-xs font-bold">
+                                                                {g}
+                                                            </span>
+                                                        ))}
+                                                    </div>
                                                 </div>
                                                 <p className="text-gray-300 text-xs sm:text-sm leading-relaxed max-w-4xl">{playingAnime.synopsis}</p>
                                             </div>
@@ -1831,11 +1810,11 @@ function App() {
                                             <button
                                                 onClick={() => setCurrentEpisodePage(p => Math.max(1, p - 1))}
                                                 disabled={currentEpisodePage === 1}
-                                                className="text-xs text-gray-400 hover:text-white disabled:opacity-30 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 cursor-pointer"
+                                                className="pagination-btn text-xs font-bold px-3.5 py-1.5 rounded-lg border transition-all cursor-pointer disabled:opacity-30 active:scale-95 shadow-sm"
                                             >
                                                 Prev
                                             </button>
-                                            <div className="flex items-center gap-1 text-xs bg-white/5 px-2.5 py-1 rounded-md border border-white/10">
+                                            <div className="pagination-box flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg border shadow-sm font-bold">
                                                 <input
                                                     type="number"
                                                     min="1"
@@ -1853,15 +1832,15 @@ function App() {
                                                             setCurrentEpisodePage(val);
                                                         }
                                                     }}
-                                                    className="w-10 bg-transparent text-center outline-none text-gray-200 font-medium no-spinner focus:text-white"
+                                                    className="w-8 bg-transparent text-center outline-none font-bold no-spinner"
                                                 />
-                                                <span className="text-white/30 select-none">/</span>
-                                                <span className="text-white/30 select-none">{Math.ceil((playingAnime.episodesList?.length || playingAnime.episodes || 0) / 12) || 1}</span>
+                                                <span className="pagination-divider font-black select-none">/</span>
+                                                <span className="pagination-total font-black select-none">{Math.ceil((playingAnime.episodesList?.length || playingAnime.episodes || 0) / 12) || 1}</span>
                                             </div>
                                             <button
                                                 onClick={() => setCurrentEpisodePage(p => Math.min((Math.ceil((playingAnime.episodesList?.length || playingAnime.episodes || 0) / 12) || 1), (Number(p) || 1) + 1))}
                                                 disabled={(Number(currentEpisodePage) || 1) === (Math.ceil((playingAnime.episodesList?.length || playingAnime.episodes || 0) / 12) || 1)}
-                                                className="text-xs text-gray-400 hover:text-white disabled:opacity-30 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 cursor-pointer"
+                                                className="pagination-btn text-xs font-bold px-3.5 py-1.5 rounded-lg border transition-all cursor-pointer disabled:opacity-30 active:scale-95 shadow-sm"
                                             >
                                                 Next
                                             </button>
@@ -1884,7 +1863,7 @@ function App() {
                                                             key={epNum}
                                                             onClick={() => isReleased && handlePlay(playingAnime, epNum)}
                                                             disabled={!isReleased}
-                                                            className={`w-full flex items-center gap-3 p-2.5 rounded-xl transition-all border cursor-pointer ${isCurrent ? 'bg-red-600 text-white border-red-500 shadow-lg shadow-red-900/30' : (isReleased ? 'bg-white/5 hover:bg-white/10 text-gray-300 border-white/5' : 'bg-white/5 opacity-40 cursor-not-allowed text-gray-600 border-transparent')}`}
+                                                            className={`mobile-episode-item w-full flex items-center gap-3 p-2.5 rounded-xl transition-all border cursor-pointer ${isCurrent ? 'bg-red-600 text-white border-red-500 shadow-lg shadow-red-900/30 font-semibold' : (isReleased ? 'bg-white/5 hover:bg-white/10 text-gray-300 border-white/5' : 'bg-white/5 opacity-40 cursor-not-allowed text-gray-600 border-transparent')}`}
                                                         >
                                                             <div className="relative shrink-0 w-20 h-14 bg-black/40 rounded-lg overflow-hidden border border-white/5">
                                                                 <img src={playingAnime.bannerUrl || playingAnime.coverUrl} className={`w-full h-full object-cover transition-opacity ${isCurrent ? 'opacity-100' : (isReleased ? 'opacity-70' : 'opacity-30 grayscale')}`} alt="" />
@@ -1914,8 +1893,8 @@ function App() {
 
                             {/* Desktop Sidebar (Only on Large Screens) */}
                             {!isPlayerMinimized && playingAnime.format !== 'MOVIE' && (
-                                <div className={`${isSidebarVisible ? 'w-80 lg:w-96 translate-x-0' : 'w-0 translate-x-full hidden'} hidden lg:flex bg-[#111] border-l border-white/5 flex-col transition-all duration-300 ease-in-out z-20 overflow-hidden no-scrollbar`}>
-                                    <div className="p-4 border-b border-white/5 bg-[#111] z-10 flex justify-between items-center whitespace-nowrap overflow-hidden">
+                                <div className={`${isSidebarVisible ? 'w-80 lg:w-96 translate-x-0' : 'w-0 translate-x-full hidden'} hidden lg:flex bg-[#111] playback-episode-sidebar border-l border-white/5 flex-col transition-all duration-300 ease-in-out z-20 overflow-hidden no-scrollbar`}>
+                                    <div className="p-4 border-b border-white/5 bg-[#111] playback-sidebar-header z-10 flex justify-between items-center whitespace-nowrap overflow-hidden">
                                         <h3 className="font-bold text-gray-200">Episodes</h3>
                                         <span className="text-xs text-gray-500">{playingAnime.episodesList?.length || playingAnime.episodes || '?'} Total</span>
                                     </div>
@@ -1926,13 +1905,13 @@ function App() {
                                             <button
                                                 onClick={() => setCurrentEpisodePage(p => Math.max(1, p - 1))}
                                                 disabled={currentEpisodePage === 1}
-                                                className="text-xs text-gray-400 hover:text-white disabled:opacity-30 px-2 py-1"
+                                                className="pagination-btn text-xs font-bold px-3 py-1 rounded-lg border transition-all cursor-pointer disabled:opacity-30 active:scale-95 shadow-sm"
                                             >
                                                 Prev
                                             </button>
 
-                                            {/* Modernized Minimal Input */}
-                                            <div className="flex items-center gap-1 text-xs bg-white/5 px-2 py-1 rounded-md border border-white/5 hover:border-white/20 transition-colors group focus-within:border-white/40">
+                                            {/* High-Contrast Modernized Pagination Input */}
+                                            <div className="pagination-box flex items-center gap-1 text-xs px-2.5 py-1 rounded-md border shadow-sm font-bold">
                                                 <input
                                                     type="number"
                                                     min="1"
@@ -1950,16 +1929,16 @@ function App() {
                                                             setCurrentEpisodePage(val);
                                                         }
                                                     }}
-                                                    className="w-10 bg-transparent text-center outline-none text-gray-200 font-medium no-spinner focus:text-white"
+                                                    className="w-8 bg-transparent text-center outline-none font-bold no-spinner"
                                                     onKeyDown={(e) => e.stopPropagation()} // Prevent key bubbling
                                                 />
-                                                <span className="text-white/30 select-none">/</span>
-                                                <span className="text-white/30 select-none">{Math.ceil((playingAnime.episodesList?.length || playingAnime.episodes || 0) / 12) || 1}</span>
+                                                <span className="pagination-divider font-black select-none">/</span>
+                                                <span className="pagination-total font-black select-none">{Math.ceil((playingAnime.episodesList?.length || playingAnime.episodes || 0) / 12) || 1}</span>
                                             </div>
                                             <button
                                                 onClick={() => setCurrentEpisodePage(p => Math.min((Math.ceil((playingAnime.episodesList?.length || playingAnime.episodes || 0) / 12) || 1), (Number(p) || 1) + 1))}
                                                 disabled={(Number(currentEpisodePage) || 1) === (Math.ceil((playingAnime.episodesList?.length || playingAnime.episodes || 0) / 12) || 1)}
-                                                className="text-xs text-gray-400 hover:text-white disabled:opacity-30 px-2 py-1"
+                                                className="pagination-btn text-xs font-bold px-3 py-1 rounded-lg border transition-all cursor-pointer disabled:opacity-30 active:scale-95 shadow-sm"
                                             >
                                                 Next
                                             </button>
@@ -1978,33 +1957,43 @@ function App() {
 
                                                 // Check if episode is released
                                                 const isReleased = !playingAnime.nextAiringEpisode || epNum < playingAnime.nextAiringEpisode.episode;
+                                                const epThumbnail = ep?.thumbnail || playingAnime.bannerUrl || playingAnime.coverUrl;
+                                                const epTitle = ep?.title && !ep.title.startsWith('Episode ') ? ep.title : (playingAnime.title ? playingAnime.title.split(' - Episode')[0] : `Episode ${epNum}`);
 
                                                 return (
                                                     <button
                                                         key={epNum}
                                                         onClick={() => isReleased && handlePlay(playingAnime, epNum)}
                                                         disabled={!isReleased}
-                                                        className={`w-full flex items-center gap-3 p-3 rounded-lg transition-all group relative overflow-hidden ${isCurrent ? 'bg-red-600 text-white' : (isReleased ? 'hover:bg-white/5 text-gray-400' : 'opacity-40 cursor-not-allowed text-gray-600')}`}
+                                                        className={`playback-episode-item w-full flex items-center gap-3 p-2.5 rounded-xl transition-all group relative overflow-hidden cursor-pointer ${isCurrent ? 'bg-red-600 text-white shadow-lg shadow-red-900/30 font-semibold' : (isReleased ? 'hover:bg-white/10 text-gray-300' : 'opacity-40 cursor-not-allowed text-gray-600')}`}
                                                     >
-                                                        <div className="relative shrink-0 w-24 h-16 bg-black/40 rounded overflow-hidden border border-white/5">
-                                                            <img src={playingAnime.bannerUrl} className={`w-full h-full object-cover transition-opacity ${isCurrent ? 'opacity-100' : (isReleased ? 'opacity-60 group-hover:opacity-100' : 'opacity-30 grayscale')}`} alt="" />
-                                                            <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                                                        <div className="relative shrink-0 w-24 h-15 bg-black/50 rounded-lg overflow-hidden border border-white/10">
+                                                            <img 
+                                                                src={epThumbnail} 
+                                                                loading="lazy"
+                                                                decoding="async"
+                                                                className={`w-full h-full object-cover transition-transform group-hover:scale-105 duration-300 ${isCurrent ? 'opacity-100' : (isReleased ? 'opacity-70 group-hover:opacity-100' : 'opacity-30 grayscale')}`} 
+                                                                alt={`Episode ${epNum}`} 
+                                                            />
+                                                            <div className="absolute inset-0 flex items-center justify-center bg-black/30">
                                                                 {isReleased ? (
-                                                                    <Play size={16} fill="currentColor" className={isCurrent ? 'text-white' : 'text-white/50'} />
+                                                                    <Play size={15} fill="currentColor" className={isCurrent ? 'text-white' : 'text-white/60 group-hover:text-white'} />
                                                                 ) : (
                                                                     <div className="flex flex-col items-center">
-                                                                        {/* Using Clock icon if available, otherwise just text/lock */}
-                                                                        <span className="text-xs font-bold text-white/70 uppercase">Not Aired</span>
+                                                                        <span className="text-[10px] font-bold text-white/70 uppercase">Not Aired</span>
                                                                     </div>
                                                                 )}
                                                             </div>
+                                                            <div className="episode-badge-red absolute bottom-1 left-1 px-1.5 py-0.5 rounded bg-red-600 border border-red-400 text-[10px] font-black text-white shadow-md leading-tight">
+                                                                Ep {epNum}
+                                                            </div>
                                                         </div>
                                                         <div className="text-left flex-1 min-w-0">
-                                                            <div className="font-medium truncate text-sm">Episode {epNum}</div>
-                                                            <div className="text-xs opacity-60 truncate">
+                                                            <div className="font-semibold truncate text-xs text-white">Episode {epNum}</div>
+                                                            <div className="text-[11px] text-gray-400 truncate mt-0.5">
                                                                 {!isReleased && playingAnime.nextAiringEpisode && epNum === playingAnime.nextAiringEpisode.episode
                                                                     ? `Airing in ${Math.round(playingAnime.nextAiringEpisode.timeUntilAiring / 86400)} days`
-                                                                    : (ep?.title || (playingAnime.title ? playingAnime.title.split(' - Episode')[0] : ''))}
+                                                                    : epTitle}
                                                             </div>
                                                         </div>
                                                     </button>
