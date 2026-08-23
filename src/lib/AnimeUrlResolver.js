@@ -110,7 +110,7 @@ export const AnimeUrlResolver = {
         const romajiSlug = this.toSlug(cleanRomaji);
         const preferredSlug = this.toSlug(cleanPreferred) || 'anime';
         const gogoSlug = this.resolveGogoSlug(cleanEnglish, cleanRomaji, cleanPreferred);
-        const primarySlug = romajiSlug || englishSlug || preferredSlug;
+        const primarySlug = englishSlug || preferredSlug || romajiSlug;
         const aniId = anime?.id && !isNaN(anime.id) ? anime.id : primarySlug;
 
         // 3. Resolve Direct Stream URL for Selected Source
