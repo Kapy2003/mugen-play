@@ -22,6 +22,7 @@ import SourceSelector from './components/common/SourceSelector';
 import { ExtensionRepoManager } from './lib/ExtensionRepoManager';
 import { ExtensionHealthChecker } from './lib/ExtensionHealthChecker';
 import { AnimeUrlResolver } from './lib/AnimeUrlResolver';
+import { EpisodeMetadataService } from './lib/services/EpisodeMetadataService';
 
 const formatAnimeTitle = (title, fallback = 'Untitled Anime') => {
     if (!title) return fallback;
@@ -558,6 +559,20 @@ function App() {
                 sourceName: targetExt ? targetExt.name : 'Stream',
                 sourceId: resolvedSlug
             });
+
+            // Asynchronously enrich episode titles, thumbnails, and descriptions
+            EpisodeMetadataService.enrichAnimeEpisodes({ ...anime, episodesList }).then(enriched => {
+                if (enriched && enriched.length > 0) {
+                    setPlayingAnime(prev => {
+                        if (!prev) return null;
+                        const prevTitle = prev.title ? prev.title.split(' - Episode')[0].trim() : '';
+                        if (prev.id === anime.id || prevTitle === baseTitle) {
+                            return { ...prev, episodesList: enriched };
+                        }
+                        return prev;
+                    });
+                }
+            }).catch(() => {});
 
         } catch (error) {
             console.error("Play Error", error);
@@ -1856,17 +1871,30 @@ function App() {
                                                         (playingAnime.url || '').includes(`ep-${epNum}`) ||
                                                         (playingAnime.url || '').includes(`episode-${epNum}`) ||
                                                         (playingAnime.streamUrl && playingAnime.streamUrl.includes(`ep-${epNum}`));
-                                                    const isReleased = !playingAnime.nextAiringEpisode || epNum < playingAnime.nextAiringEpisode.episode;
+                                                    const isReleased = (playingAnime.episodesList && epNum <= playingAnime.episodesList.length) || !playingAnime.nextAiringEpisode || epNum < playingAnime.nextAiringEpisode.episode;
+                                                    const epThumbnail = ep?.thumbnail || playingAnime.bannerUrl || playingAnime.coverUrl;
+                                                    const hasCustomTitle = ep?.title && !ep.title.toLowerCase().startsWith('episode ') && !ep.title.toLowerCase().includes('untitled');
+                                                    const epSubtitle = hasCustomTitle
+                                                        ? ep.title
+                                                        : (!isReleased && playingAnime.nextAiringEpisode && epNum === playingAnime.nextAiringEpisode.episode
+                                                            ? `Airing in ${Math.round(playingAnime.nextAiringEpisode.timeUntilAiring / 86400)} days`
+                                                            : (isCurrent ? 'Now Playing' : 'Ready to Stream'));
 
                                                     return (
                                                         <button
                                                             key={epNum}
                                                             onClick={() => isReleased && handlePlay(playingAnime, epNum)}
                                                             disabled={!isReleased}
-                                                            className={`mobile-episode-item w-full flex items-center gap-3 p-2.5 rounded-xl transition-all border cursor-pointer ${isCurrent ? 'bg-red-600 text-white border-red-500 shadow-lg shadow-red-900/30 font-semibold' : (isReleased ? 'bg-white/5 hover:bg-white/10 text-gray-300 border-white/5' : 'bg-white/5 opacity-40 cursor-not-allowed text-gray-600 border-transparent')}`}
+                                                            className={`mobile-episode-item w-full flex items-center gap-3 p-2.5 rounded-xl transition-all border group cursor-pointer ${isCurrent ? 'bg-red-600 text-white border-red-500 shadow-lg shadow-red-900/30 font-semibold' : (isReleased ? 'bg-white/5 hover:bg-white/10 text-gray-300 border-white/5' : 'bg-white/5 opacity-40 cursor-not-allowed text-gray-600 border-transparent')}`}
                                                         >
-                                                            <div className="relative shrink-0 w-20 h-14 bg-black/40 rounded-lg overflow-hidden border border-white/5">
-                                                                <img src={playingAnime.bannerUrl || playingAnime.coverUrl} className={`w-full h-full object-cover transition-opacity ${isCurrent ? 'opacity-100' : (isReleased ? 'opacity-70' : 'opacity-30 grayscale')}`} alt="" />
+                                                            <div className="relative shrink-0 w-24 h-15 bg-black/40 rounded-lg overflow-hidden border border-white/10">
+                                                                <img
+                                                                    src={epThumbnail}
+                                                                    loading="lazy"
+                                                                    decoding="async"
+                                                                    className={`w-full h-full object-cover transition-transform group-hover:scale-105 duration-300 ${isCurrent ? 'opacity-100' : (isReleased ? 'opacity-70 group-hover:opacity-100' : 'opacity-30 grayscale')}`}
+                                                                    alt={`Episode ${epNum}`}
+                                                                />
                                                                 <div className="absolute inset-0 flex items-center justify-center bg-black/30">
                                                                     {isReleased ? (
                                                                         <Play size={14} fill="currentColor" className={isCurrent ? 'text-white' : 'text-white/70'} />
@@ -1874,13 +1902,14 @@ function App() {
                                                                         <span className="text-[9px] font-bold text-white/70 uppercase">Not Aired</span>
                                                                     )}
                                                                 </div>
+                                                                <div className="episode-badge-red absolute bottom-1 left-1 px-1.5 py-0.5 rounded bg-red-600 border border-red-400 text-[10px] font-black text-white shadow-md leading-tight">
+                                                                    Ep {epNum}
+                                                                </div>
                                                             </div>
                                                             <div className="text-left flex-1 min-w-0">
-                                                                <div className="font-bold truncate text-sm">Episode {epNum}</div>
-                                                                <div className="text-xs opacity-60 truncate">
-                                                                    {!isReleased && playingAnime.nextAiringEpisode && epNum === playingAnime.nextAiringEpisode.episode
-                                                                        ? `Airing in ${Math.round(playingAnime.nextAiringEpisode.timeUntilAiring / 86400)} days`
-                                                                        : (isCurrent ? 'Now Playing' : 'Ready to Stream')}
+                                                                <div className="font-semibold truncate text-xs text-white">Episode {epNum}</div>
+                                                                <div className="text-[11px] text-gray-400 truncate mt-0.5 font-medium">
+                                                                    {epSubtitle}
                                                                 </div>
                                                             </div>
                                                         </button>
@@ -1956,9 +1985,14 @@ function App() {
                                                     (playingAnime.streamUrl && playingAnime.streamUrl.includes(`ep-${epNum}`));
 
                                                 // Check if episode is released
-                                                const isReleased = !playingAnime.nextAiringEpisode || epNum < playingAnime.nextAiringEpisode.episode;
+                                                const isReleased = (playingAnime.episodesList && epNum <= playingAnime.episodesList.length) || !playingAnime.nextAiringEpisode || epNum < playingAnime.nextAiringEpisode.episode;
                                                 const epThumbnail = ep?.thumbnail || playingAnime.bannerUrl || playingAnime.coverUrl;
-                                                const epTitle = ep?.title && !ep.title.startsWith('Episode ') ? ep.title : (playingAnime.title ? playingAnime.title.split(' - Episode')[0] : `Episode ${epNum}`);
+                                                const hasCustomTitle = ep?.title && !ep.title.toLowerCase().startsWith('episode ') && !ep.title.toLowerCase().includes('untitled');
+                                                const epSubtitle = hasCustomTitle
+                                                    ? ep.title
+                                                    : (!isReleased && playingAnime.nextAiringEpisode && epNum === playingAnime.nextAiringEpisode.episode
+                                                        ? `Airing in ${Math.round(playingAnime.nextAiringEpisode.timeUntilAiring / 86400)} days`
+                                                        : (isCurrent ? 'Now Playing' : 'Ready to Stream'));
 
                                                 return (
                                                     <button
@@ -1991,9 +2025,7 @@ function App() {
                                                         <div className="text-left flex-1 min-w-0">
                                                             <div className="font-semibold truncate text-xs text-white">Episode {epNum}</div>
                                                             <div className="text-[11px] text-gray-400 truncate mt-0.5">
-                                                                {!isReleased && playingAnime.nextAiringEpisode && epNum === playingAnime.nextAiringEpisode.episode
-                                                                    ? `Airing in ${Math.round(playingAnime.nextAiringEpisode.timeUntilAiring / 86400)} days`
-                                                                    : epTitle}
+                                                                {epSubtitle}
                                                             </div>
                                                         </div>
                                                     </button>

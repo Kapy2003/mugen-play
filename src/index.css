@@ -524,11 +524,14 @@
 }
 
 .light-theme .playback-episode-item:not(.bg-red-600) .text-white,
-.light-theme .mobile-episode-item:not(.bg-red-600) .font-bold {
+.light-theme .mobile-episode-item:not(.bg-red-600) .text-white,
+.light-theme .mobile-episode-item:not(.bg-red-600) .font-bold,
+.light-theme .mobile-episode-item:not(.bg-red-600) .font-semibold {
   color: #0f172a !important;
 }
 
 .light-theme .playback-episode-item:not(.bg-red-600) .text-gray-400,
+.light-theme .mobile-episode-item:not(.bg-red-600) .text-gray-400,
 .light-theme .mobile-episode-item:not(.bg-red-600) .opacity-60 {
   color: #64748b !important;
   opacity: 1 !important;

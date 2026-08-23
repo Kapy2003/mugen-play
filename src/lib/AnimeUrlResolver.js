@@ -153,26 +153,25 @@ export const AnimeUrlResolver = {
         // 4. Generate Simple Episode Playlist
         let totalEpisodes = parseInt(anime?.episodes || anime?.totalEpisodes, 10);
         const titleText = (typeof anime?.title === 'string' ? anime.title : (anime?.title?.english || anime?.title?.romaji || anime?.name || '')).toLowerCase();
-        if (!totalEpisodes || totalEpisodes <= 12) {
-            if (titleText.includes('one piece')) {
-                totalEpisodes = 1125;
-            } else if (titleText.includes('detective conan') || titleText.includes('case closed')) {
-                totalEpisodes = 1150;
-            } else if (titleText.includes('naruto')) {
-                totalEpisodes = 500;
-            } else if (titleText.includes('fairy tail')) {
-                totalEpisodes = 328;
-            } else if (titleText.includes('dragon ball z')) {
-                totalEpisodes = 291;
-            } else if (titleText.includes('dragon ball super')) {
-                totalEpisodes = 131;
-            } else if (titleText.includes('pokemon') || titleText.includes('pocket monster')) {
-                totalEpisodes = 1200;
-            } else if (anime?.nextAiringEpisode?.episode) {
-                totalEpisodes = Math.max(anime.nextAiringEpisode.episode - 1, totalEpisodes || 24);
-            } else if (!totalEpisodes) {
-                totalEpisodes = 24;
-            }
+        
+        if (titleText.includes('one piece')) {
+            totalEpisodes = Math.max(totalEpisodes || 0, 1150);
+        } else if (titleText.includes('detective conan') || titleText.includes('case closed')) {
+            totalEpisodes = Math.max(totalEpisodes || 0, 1150);
+        } else if (titleText.includes('pokemon') || titleText.includes('pocket monster')) {
+            totalEpisodes = Math.max(totalEpisodes || 0, 1200);
+        } else if (titleText.includes('naruto')) {
+            totalEpisodes = Math.max(totalEpisodes || 0, 500);
+        } else if (titleText.includes('fairy tail')) {
+            totalEpisodes = Math.max(totalEpisodes || 0, 328);
+        } else if (titleText.includes('dragon ball z')) {
+            totalEpisodes = Math.max(totalEpisodes || 0, 291);
+        } else if (titleText.includes('dragon ball super')) {
+            totalEpisodes = Math.max(totalEpisodes || 0, 131);
+        } else if (anime?.nextAiringEpisode?.episode) {
+            totalEpisodes = Math.max(anime.nextAiringEpisode.episode - 1, totalEpisodes || 24);
+        } else if (!totalEpisodes) {
+            totalEpisodes = 24;
         }
         let episodesList = anime?.episodesList;
         if (!Array.isArray(episodesList) || episodesList.length === 0) {

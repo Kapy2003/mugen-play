@@ -52,28 +52,29 @@ export class AnilistSource extends Extension {
         const rawEp = media.episodes || (media.nextAiringEpisode ? media.nextAiringEpisode.episode - 1 : null);
         let resolvedEpisodes = rawEp;
         const titleStr = `${media.title?.english || ''} ${media.title?.romaji || ''}`.toLowerCase();
-        if (!resolvedEpisodes || resolvedEpisodes <= 12) {
-            if (titleStr.includes('one piece')) {
-                resolvedEpisodes = 1125;
-            } else if (titleStr.includes('detective conan') || titleStr.includes('case closed')) {
-                resolvedEpisodes = 1150;
-            } else if (titleStr.includes('bleach') && !titleStr.includes('thousand-year') && !titleStr.includes('tybw')) {
-                resolvedEpisodes = 366;
-            } else if (titleStr.includes('naruto shippuden')) {
-                resolvedEpisodes = 500;
-            } else if (titleStr.includes('naruto') && !titleStr.includes('shippuden') && !titleStr.includes('boruto')) {
-                resolvedEpisodes = 220;
-            } else if (titleStr.includes('black clover')) {
-                resolvedEpisodes = 170;
-            } else if (titleStr.includes('fairy tail')) {
-                resolvedEpisodes = 328;
-            } else if (titleStr.includes('dragon ball z')) {
-                resolvedEpisodes = 291;
-            } else if (titleStr.includes('dragon ball super')) {
-                resolvedEpisodes = 131;
-            } else if (titleStr.includes('pokemon') || titleStr.includes('pocket monster')) {
-                resolvedEpisodes = 1200;
-            } else if (media.status === 'RELEASING') {
+        
+        if (titleStr.includes('one piece')) {
+            resolvedEpisodes = Math.max(resolvedEpisodes || 0, 1150);
+        } else if (titleStr.includes('detective conan') || titleStr.includes('case closed')) {
+            resolvedEpisodes = Math.max(resolvedEpisodes || 0, 1150);
+        } else if (titleStr.includes('bleach') && !titleStr.includes('thousand-year') && !titleStr.includes('tybw')) {
+            resolvedEpisodes = Math.max(resolvedEpisodes || 0, 366);
+        } else if (titleStr.includes('naruto shippuden')) {
+            resolvedEpisodes = Math.max(resolvedEpisodes || 0, 500);
+        } else if (titleStr.includes('naruto') && !titleStr.includes('shippuden') && !titleStr.includes('boruto')) {
+            resolvedEpisodes = Math.max(resolvedEpisodes || 0, 220);
+        } else if (titleStr.includes('pokemon') || titleStr.includes('pocket monster')) {
+            resolvedEpisodes = Math.max(resolvedEpisodes || 0, 1200);
+        } else if (titleStr.includes('black clover')) {
+            resolvedEpisodes = Math.max(resolvedEpisodes || 0, 170);
+        } else if (titleStr.includes('fairy tail')) {
+            resolvedEpisodes = Math.max(resolvedEpisodes || 0, 328);
+        } else if (titleStr.includes('dragon ball z')) {
+            resolvedEpisodes = Math.max(resolvedEpisodes || 0, 291);
+        } else if (titleStr.includes('dragon ball super')) {
+            resolvedEpisodes = Math.max(resolvedEpisodes || 0, 131);
+        } else if (!resolvedEpisodes || resolvedEpisodes <= 12) {
+            if (media.status === 'RELEASING') {
                 resolvedEpisodes = media.nextAiringEpisode ? Math.max(media.nextAiringEpisode.episode - 1, 24) : 24;
             }
         }
@@ -95,7 +96,9 @@ export class AnilistSource extends Extension {
 
             if (matched?.title) {
                 const stripped = matched.title.replace(/^(?:Episode|Ep)\s*\d+\s*[-:—–]\s*/i, '').trim();
-                cleanTitle = stripped || `Episode ${i}`;
+                if (stripped && !stripped.match(/^(?:untitled|n\/a|tbd|null|undefined|episode\s*\d+)$/i)) {
+                    cleanTitle = stripped;
+                }
             }
 
             episodesList.push({

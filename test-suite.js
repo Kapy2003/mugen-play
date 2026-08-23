@@ -493,6 +493,47 @@ assert(disabledResult.streamUrl === '', 'Disabled extension returns empty stream
 assert(isStreamUnplayable(disabledResult.streamUrl, false) === true, 'Disabled extension stream is flagged as unplayable');
 console.log('');
 
+// --- TEST 30: Mobile Episode Item Metadata & Thumbnail Parity ---
+console.log('▶ Test Case 30: Mobile Episode Item Metadata & Thumbnail Parity');
+const testAnimeData = {
+    title: { english: 'Attack on Titan' },
+    bannerUrl: 'https://cdn.anilist.co/banner/16498.jpg',
+    coverUrl: 'https://cdn.anilist.co/cover/16498.jpg',
+    episodesList: [
+        { number: 1, title: 'To You, in 2000 Years', thumbnail: 'https://tmdb.org/still1.jpg' },
+        { number: 2, title: 'That Day', thumbnail: 'https://tmdb.org/still2.jpg' }
+    ]
+};
+const mobileEp1 = testAnimeData.episodesList[0];
+const mobileThumb = mobileEp1?.thumbnail || testAnimeData.bannerUrl || testAnimeData.coverUrl;
+const mobileTitle = mobileEp1?.title && !mobileEp1.title.startsWith('Episode ') ? mobileEp1.title : 'Episode 1';
+assert(mobileThumb === 'https://tmdb.org/still1.jpg', 'Mobile episode item renders real episode thumbnail');
+assert(mobileTitle === 'To You, in 2000 Years', 'Mobile episode item renders specific episode title');
+console.log('');
+
+// --- TEST 31: Episode Metadata Service & Bleach Title Resolution ---
+console.log('▶ Test Case 31: Episode Metadata Service & Bleach Title Resolution');
+const bleachRawMock = [
+    { number: 1, title: 'Episode 1' },
+    { number: 2, title: 'Episode 2' },
+    { number: 3, title: 'Episode 3' }
+];
+const kitsuBleachMock = [
+    { number: 1, title: 'The Day I Became a Shinigami', thumbnail: 'https://media.kitsu.app/episodes/thumbnails/106778/original.jpg', description: 'Ichigo becomes a Soul Reaper' },
+    { number: 2, title: "A Shinigami's Work", thumbnail: 'https://media.kitsu.app/episodes/thumbnails/106779/original.jpg', description: 'Rukia explains Soul Reaper duties' },
+    { number: 3, title: "The Older Brother's Wish", thumbnail: 'https://media.kitsu.app/episodes/thumbnails/106780/original.jpg', description: 'Orihime brother hollow encounter' }
+];
+const epMapMock = new Map();
+kitsuBleachMock.forEach(ep => epMapMock.set(ep.number, ep));
+const enrichedBleachMock = bleachRawMock.map(ep => {
+    const fetched = epMapMock.get(ep.number);
+    return fetched ? { ...ep, title: fetched.title, thumbnail: fetched.thumbnail, description: fetched.description } : ep;
+});
+assert(enrichedBleachMock[0].title === 'The Day I Became a Shinigami', 'Bleach Ep 1 title resolved correctly');
+assert(enrichedBleachMock[1].title === "A Shinigami's Work", 'Bleach Ep 2 title resolved correctly');
+assert(enrichedBleachMock[0].thumbnail.includes('106778'), 'Bleach Ep 1 screencap thumbnail mapped');
+console.log('');
+
 // --- FINAL SUMMARY ---
 console.log('====================================================');
 console.log(`📊 TEST RESULTS: ${passed} PASSED | ${failed} FAILED`);

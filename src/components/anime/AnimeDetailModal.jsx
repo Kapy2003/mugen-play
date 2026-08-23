@@ -1,11 +1,49 @@
-import { useState, useRef, memo } from 'react';
+import { useState, useRef, useEffect, memo } from 'react';
 import { X, Play, Star, Calendar, Heart, Share2, LayoutGrid, List, Tv } from 'lucide-react';
+import { EpisodeMetadataService } from '../../lib/services/EpisodeMetadataService';
 
 const AnimeDetailModal = memo(({ anime, onClose, onPlay, onToggleFavorite, isFavorite }) => {
     const [showTrailer, setShowTrailer] = useState(false);
     const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
     const [episodeViewMode, setEpisodeViewMode] = useState('cards'); // 'cards' | 'pills'
     const touchStartRef = useRef(null);
+
+    const coverSrc = anime?.coverUrl || anime?.image || anime?.poster;
+    const bannerSrc = anime?.bannerUrl || anime?.bannerImage || coverSrc;
+
+    const [episodes, setEpisodes] = useState(() => {
+        return anime?.episodesList && anime.episodesList.length > 0
+            ? anime.episodesList
+            : Array.from({ length: anime?.episodes || 12 }, (_, i) => ({
+                number: i + 1,
+                title: `Episode ${i + 1}`,
+                thumbnail: bannerSrc || coverSrc
+            }));
+    });
+
+    useEffect(() => {
+        if (!anime) return;
+        let isCancelled = false;
+
+        const initialList = anime.episodesList && anime.episodesList.length > 0
+            ? anime.episodesList
+            : Array.from({ length: anime.episodes || 12 }, (_, i) => ({
+                number: i + 1,
+                title: `Episode ${i + 1}`,
+                thumbnail: bannerSrc || coverSrc
+            }));
+        setEpisodes(initialList);
+
+        EpisodeMetadataService.enrichAnimeEpisodes(anime).then(enriched => {
+            if (!isCancelled && enriched && enriched.length > 0) {
+                setEpisodes(enriched);
+            }
+        }).catch(() => {});
+
+        return () => {
+            isCancelled = true;
+        };
+    }, [anime, bannerSrc, coverSrc]);
 
     if (!anime) return null;
 
@@ -14,8 +52,6 @@ const AnimeDetailModal = memo(({ anime, onClose, onPlay, onToggleFavorite, isFav
         : (anime.title?.english || anime.title?.romaji || anime.title?.canonical || anime.name || 'Untitled Anime');
 
     const genresList = Array.isArray(anime.genres) ? anime.genres : [];
-    const coverSrc = anime.coverUrl || anime.image || anime.poster;
-    const bannerSrc = anime.bannerUrl || anime.bannerImage || coverSrc;
 
     // Standardize rating display (e.g. 8.5)
     const rawRating = anime.rating || anime.score;
@@ -25,7 +61,11 @@ const AnimeDetailModal = memo(({ anime, onClose, onPlay, onToggleFavorite, isFav
 
     // Helper to check if an episode is released
     const isEpisodeReleased = (epNum) => {
-        if (!anime.nextAiringEpisode) return true;
+        const titleStr = `${anime?.title?.english || ''} ${anime?.title?.romaji || ''} ${typeof anime?.title === 'string' ? anime.title : ''}`.toLowerCase();
+        if (titleStr.includes('one piece') || titleStr.includes('detective conan') || titleStr.includes('case closed') || titleStr.includes('pokemon') || titleStr.includes('bleach') || titleStr.includes('naruto')) {
+            return true;
+        }
+        if (!anime?.nextAiringEpisode) return true;
         return epNum < anime.nextAiringEpisode.episode;
     };
 
@@ -52,14 +92,6 @@ const AnimeDetailModal = memo(({ anime, onClose, onPlay, onToggleFavorite, isFav
         const minutes = Math.floor((seconds % 3600) / 60);
         return `${hours}h ${minutes}m`;
     };
-
-    const episodes = anime.episodesList && anime.episodesList.length > 0
-        ? anime.episodesList
-        : Array.from({ length: anime.episodes || 12 }, (_, i) => ({
-            number: i + 1,
-            title: `Episode ${i + 1}`,
-            thumbnail: bannerSrc || coverSrc
-        }));
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md animate-fade-in">
@@ -300,11 +332,13 @@ const AnimeDetailModal = memo(({ anime, onClose, onPlay, onToggleFavorite, isFav
                                                 </div>
                                             </div>
                                             <div className="flex-1 min-w-0">
-                                                <h4 className="text-xs font-bold text-white truncate group-hover:text-red-400 transition-colors" title={ep.fullTitle || ep.title}>
-                                                    {ep.title}
+                                                <h4 className="text-xs font-bold text-white truncate group-hover:text-red-400 transition-colors" title={ep.fullTitle || (ep.title ? (ep.title.startsWith('Episode ') ? ep.title : `Episode ${epNum}: ${ep.title}`) : `Episode ${epNum}`)}>
+                                                    {ep.title && !ep.title.toLowerCase().includes('untitled')
+                                                        ? (ep.title.startsWith('Episode ') ? ep.title : `Episode ${epNum}: ${ep.title}`)
+                                                        : `Episode ${epNum}`}
                                                 </h4>
-                                                <p className="text-[11px] text-gray-400 mt-0.5 line-clamp-1 font-medium" title={ep.description || (released ? 'Watch Episode' : 'Upcoming')}>
-                                                    {ep.description ? ep.description : (released ? 'Watch Episode' : 'Upcoming')}
+                                                <p className="text-[11px] text-gray-400 mt-0.5 line-clamp-1 font-medium" title={ep.description || (released ? 'Ready to Stream' : 'Upcoming')}>
+                                                    {ep.description ? ep.description : (released ? 'Ready to Stream' : 'Upcoming')}
                                                 </p>
                                             </div>
                                         </button>
