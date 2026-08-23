@@ -300,22 +300,22 @@ const VideoPlayer = ({
         if (isUnplayable) {
             if (isMinimized) {
                 return (
-                    <div className="mascot-screen-container w-full h-full flex flex-col items-center justify-center p-2 text-center select-none overflow-hidden relative">
-                        {/* Compact Mascot Animation */}
-                        <div className="relative w-32 h-24 flex items-center justify-center scale-90">
-                            <div className="absolute inset-0 bg-red-600/20 blur-xl rounded-full animate-pulse" />
+                    <div className="mascot-screen-container w-full h-full flex flex-col items-center justify-center p-2 text-center select-none overflow-hidden relative bg-gradient-to-b from-[#121216] to-[#0a0a0d]">
+                        {/* Compact Mascot Animation for Mini Player */}
+                        <div className="relative w-20 h-16 sm:w-28 sm:h-20 flex items-center justify-center">
+                            <div className="absolute inset-0 bg-red-600/20 blur-lg rounded-full animate-pulse" />
                             
-                            {/* Orbiting Cartoon Dizzy Stars */}
-                            <div className="absolute -top-2 w-full flex justify-center pointer-events-none z-20">
-                                <div className="animate-anime-orbit flex items-center justify-center text-amber-300 font-black text-[10px]">
+                            {/* Orbiting Stars */}
+                            <div className="absolute -top-1 w-full flex justify-center pointer-events-none z-20">
+                                <div className="animate-anime-orbit flex items-center justify-center text-amber-300 font-black text-[9px]">
                                     <span>★</span>
-                                    <span className="text-red-400 font-bold ml-2">?</span>
-                                    <span className="text-yellow-400 text-[8px] ml-2">✦</span>
+                                    <span className="text-red-400 font-bold ml-1.5">?</span>
+                                    <span className="text-yellow-400 text-[7px] ml-1.5">✦</span>
                                 </div>
                             </div>
 
-                            {/* TV Mascot Body */}
-                            <svg viewBox="0 0 160 120" className="w-full h-full drop-shadow-xl overflow-visible animate-anime-panic" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            {/* Mini TV Mascot Body */}
+                            <svg viewBox="0 0 160 120" className="w-full h-full drop-shadow-md overflow-visible animate-anime-panic" fill="none" xmlns="http://www.w3.org/2000/svg">
                                 <g className="animate-anime-antenna origin-bottom">
                                     <path d="M54 22 L32 4 M106 22 L128 4" stroke="#e50914" strokeWidth="3" strokeLinecap="round" opacity="0.9" />
                                     <circle cx="32" cy="4" r="3.5" fill="#ff4d4d" />
@@ -347,35 +347,33 @@ const VideoPlayer = ({
                                 </g>
                                 <circle cx="130" cy="42" r="5" fill="#252530" stroke="#4b4b5a" strokeWidth="1.5" />
                                 <circle cx="130" cy="62" r="5" fill="#252530" stroke="#4b4b5a" strokeWidth="1.5" />
-                                <line x1="126" y1="80" x2="134" y2="80" stroke="#e50914" strokeWidth="2" strokeLinecap="round" />
-                                <line x1="126" y1="86" x2="134" y2="86" stroke="#e50914" strokeWidth="2" strokeLinecap="round" />
                                 <path d="M48 108 L38 116 M112 108 L122 116" stroke="#333340" strokeWidth="3.5" strokeLinecap="round" />
                             </svg>
                         </div>
-                        <p className="mascot-title text-[11px] font-black text-white mt-1">
-                            {!activeSrc ? 'Nani?! No Extension' : is404 ? '404: Isekai\'d!' : 'Stream Error'}
+                        <p className="mascot-title text-[10px] sm:text-xs font-black text-white mt-1">
+                            {!activeSrc ? 'No Extension' : is404 ? '404: Isekai\'d' : 'Stream Offline'}
                         </p>
                     </div>
                 );
             }
 
             return (
-                <div className="mascot-screen-container w-full h-full flex flex-col items-center justify-center bg-gradient-to-b from-[#121216] to-[#0a0a0d] text-gray-400 p-6 sm:p-8 text-center space-y-4 animate-fade-in select-none">
-                    {/* Funny Anime Dizzy Mascot Animation */}
-                    <div className="relative w-40 h-32 sm:w-48 sm:h-40 mx-auto flex items-center justify-center">
-                        <div className="absolute inset-0 bg-red-600/20 blur-2xl rounded-full animate-pulse" />
+                <div className="mascot-screen-container w-full h-full flex flex-col items-center justify-center bg-gradient-to-b from-[#121216] to-[#0a0a0d] text-gray-400 p-2 sm:p-6 text-center space-y-1.5 sm:space-y-3 animate-fade-in select-none overflow-y-auto no-scrollbar">
+                    {/* Responsive Anime Dizzy Mascot Animation */}
+                    <div className="relative w-20 h-16 sm:w-36 sm:h-28 shrink-0 flex items-center justify-center">
+                        <div className="absolute inset-0 bg-red-600/20 blur-xl rounded-full animate-pulse" />
                         
                         {/* Orbiting Cartoon Dizzy Stars / Question Marks */}
-                        <div className="absolute -top-3 w-full flex justify-center pointer-events-none z-20">
-                            <div className="animate-anime-orbit flex items-center justify-center text-amber-300 font-black text-xs">
+                        <div className="absolute -top-2 w-full flex justify-center pointer-events-none z-20">
+                            <div className="animate-anime-orbit flex items-center justify-center text-amber-300 font-black text-[10px] sm:text-xs">
                                 <span>★</span>
-                                <span className="text-red-400 font-bold ml-3">?</span>
-                                <span className="text-yellow-400 text-[10px] ml-3">✦</span>
+                                <span className="text-red-400 font-bold ml-2 sm:ml-3">?</span>
+                                <span className="text-yellow-400 text-[8px] sm:text-[10px] ml-2 sm:ml-3">✦</span>
                             </div>
                         </div>
 
                         {/* TV Mascot Body (Panics and Shakes) */}
-                        <svg viewBox="0 0 160 120" className="w-full h-full drop-shadow-2xl overflow-visible animate-anime-panic" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <svg viewBox="0 0 160 120" className="w-full h-full drop-shadow-xl overflow-visible animate-anime-panic" fill="none" xmlns="http://www.w3.org/2000/svg">
                             {/* Twitching TV Antennas */}
                             <g className="animate-anime-antenna origin-bottom">
                                 <path d="M54 22 L32 4 M106 22 L128 4" stroke="#e50914" strokeWidth="3" strokeLinecap="round" opacity="0.9" />
@@ -428,7 +426,7 @@ const VideoPlayer = ({
                                 />
                             </g>
 
-                            {/* Trembling Wavy Comic Mouth ( >﹏< ) */}
+                            {/* Trembling Wavy Comic Mouth */}
                             <path d="M62 76 Q66 71 71 76 Q76 81 81 76" stroke="#ff4d4d" strokeWidth="2.5" strokeLinecap="round" fill="none" />
                             
                             {/* Blushing Comic Cheeks */}
@@ -451,53 +449,49 @@ const VideoPlayer = ({
                         </svg>
                     </div>
 
-                    <div className="space-y-2 max-w-lg px-4">
-                        <div className="mascot-badge inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-red-600/25 text-red-300 border border-red-500/50 text-xs font-black tracking-wider uppercase shadow-md backdrop-blur-sm">
-                            <AlertTriangle className="w-4 h-4 animate-bounce text-red-400" />
+                    <div className="space-y-1 max-w-md px-2 shrink-0">
+                        <div className="mascot-badge inline-flex items-center gap-1 px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-full bg-red-600/25 text-red-300 border border-red-500/50 text-[10px] sm:text-xs font-black tracking-wider uppercase shadow-sm backdrop-blur-sm">
+                            <AlertTriangle className="w-3 h-3 sm:w-3.5 sm:h-3.5 animate-bounce text-red-400" />
                             {!activeSrc
-                                ? '(⊙_⊙;) NANI?! NO STREAM EXTENSION?!'
+                                ? '(⊙_⊙;) NO EXTENSION'
                                 : is404
-                                    ? '(x_x) 404: STREAM GOT ISEKAI\'D!'
-                                    : '(>﹏<) YAMERO! SIGNAL COLLAPSED!'}
+                                    ? '(x_x) 404: ISEKAI\'D!'
+                                    : '(>﹏<) SIGNAL LOST!'}
                         </div>
-                        <h3 className="mascot-title text-white font-black text-lg sm:text-2xl tracking-tight drop-shadow-md">
+                        <h3 className="mascot-title text-white font-black text-xs sm:text-lg tracking-tight drop-shadow leading-snug">
                             {!activeSrc
-                                ? 'Nani The Heck?! Where\'s Your Stream Extension?!'
+                                ? 'Nani?! No Stream Source Selected'
                                 : is404
-                                    ? 'Nani?! This Episode Got Isekai\'d To Another World!'
-                                    : 'Nani?! The Streaming Hamsters Tripped Over The Cable!'}
+                                    ? 'Nani?! This Episode Got Isekai\'d!'
+                                    : 'Nani?! Stream Link Disconnected!'}
                         </h3>
-                        <p className="mascot-subtitle text-sm sm:text-base text-gray-100 font-medium leading-relaxed drop-shadow-sm">
+                        <p className="mascot-subtitle text-[10px] sm:text-xs text-gray-300 font-medium leading-tight max-w-sm mx-auto line-clamp-2">
                             {!activeSrc
-                                ? 'Our little TV mascot looked everywhere but couldn\'t find a streaming power-up! Head over to the Extension Store to unlock anime playback in 1 click.'
+                                ? 'Install a streaming extension from the store to unlock anime playback in 1 click.'
                                 : is404
-                                    ? 'The server summoned a wild 404 trap! The episode might be taking a ramen break or got lost in the anime multiverse. Cast a wake-up spell or switch servers!'
-                                    : 'Our high-speed anime hamsters are panicking and untangling the wires. Cast a wake-up spell or switch servers to jump back into the action!'}
+                                    ? 'The server returned a 404 not-found. Try casting a wake-up spell or switch source.'
+                                    : 'The video stream is currently unreachable. Switch extension or retry below.'}
                         </p>
                     </div>
 
-                    <div className="flex flex-wrap items-center justify-center gap-3 pt-3">
+                    <div className="flex flex-wrap items-center justify-center gap-2 pt-1 shrink-0">
                         {onOpenExtensionStore && (
                             <button
                                 onClick={onOpenExtensionStore}
-                                className="px-5 py-3 bg-red-600 hover:bg-red-500 text-white text-xs sm:text-sm font-bold rounded-xl transition-all flex items-center gap-2 shadow-xl shadow-red-600/40 active:scale-95 cursor-pointer"
+                                className="px-3.5 py-1.5 sm:px-5 sm:py-2 bg-red-600 hover:bg-red-500 text-white text-[11px] sm:text-xs font-bold rounded-lg sm:rounded-xl transition-all flex items-center gap-1.5 shadow-lg shadow-red-600/30 active:scale-95 cursor-pointer"
                             >
-                                <ShoppingBag size={16} /> {!activeSrc ? 'Grab Extension from Store' : 'Switch Extension / Server'}
+                                <ShoppingBag size={13} /> {!activeSrc ? 'Extension Store' : 'Switch Source'}
                             </button>
                         )}
                         <button
                             onClick={handleRetry}
                             disabled={isRetrying}
-                            className={`mascot-retry-btn px-5 py-3 text-white text-xs sm:text-sm font-bold rounded-xl transition-all flex items-center gap-2 border border-gray-700 active:scale-95 shadow-md hover:border-red-500/50 ${
+                            className={`mascot-retry-btn px-3.5 py-1.5 sm:px-5 sm:py-2 text-white text-[11px] sm:text-xs font-bold rounded-lg sm:rounded-xl transition-all flex items-center gap-1.5 border border-gray-700 active:scale-95 shadow-sm hover:border-red-500/50 ${
                                 isRetrying ? 'bg-gray-800/60 opacity-80 cursor-wait' : 'bg-gray-800 hover:bg-gray-700 cursor-pointer'
                             }`}
                         >
-                            <RefreshCw size={15} className={isRetrying ? 'animate-spin text-amber-400' : 'hover:rotate-180 transition-transform duration-500'} />
-                            {isRetrying
-                                ? 'Checking Stream...'
-                                : !activeSrc
-                                    ? 'Retry Check'
-                                    : '⚡ Cast Wake-Up Spell (Retry)'}
+                            <RefreshCw size={12} className={isRetrying ? 'animate-spin text-amber-400' : 'hover:rotate-180 transition-transform duration-500'} />
+                            {isRetrying ? 'Checking...' : '⚡ Retry Stream'}
                         </button>
                     </div>
                 </div>

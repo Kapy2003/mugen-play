@@ -23,6 +23,7 @@ const HorizontalScrollList = memo(({ title, icon: Icon, items, onItemClick, rend
         dragRef.current = {
             isDragging: true,
             startX: e.pageX - scrollRef.current.offsetLeft,
+            startY: e.pageY,
             scrollLeft: scrollRef.current.scrollLeft,
             hasMoved: false
         };
@@ -41,9 +42,17 @@ const HorizontalScrollList = memo(({ title, icon: Icon, items, onItemClick, rend
 
     const handleMouseMove = (e) => {
         if (!dragRef.current.isDragging || !scrollRef.current) return;
-        e.preventDefault();
-        const x = e.pageX - scrollRef.current.offsetLeft;
-        const walk = (x - dragRef.current.startX) * 1.8;
+        const currentX = e.pageX - scrollRef.current.offsetLeft;
+        const dx = currentX - dragRef.current.startX;
+        const dy = e.pageY - dragRef.current.startY;
+
+        // If user movement is predominantly vertical, release drag so page scrolls smoothly
+        if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 8) {
+            dragRef.current.isDragging = false;
+            return;
+        }
+
+        const walk = dx * 1.5;
         if (Math.abs(walk) > 5) {
             dragRef.current.hasMoved = true;
         }
@@ -87,7 +96,7 @@ const HorizontalScrollList = memo(({ title, icon: Icon, items, onItemClick, rend
 
             <div
                 ref={scrollRef}
-                className="flex gap-3 sm:gap-4 overflow-x-auto no-scrollbar scroll-smooth py-1 sm:py-2 select-none cursor-grab active:cursor-grabbing touch-pan-x overscroll-x-contain will-change-scroll transform-gpu"
+                className="flex gap-3 sm:gap-4 overflow-x-auto no-scrollbar scroll-smooth py-1 sm:py-2 select-none cursor-grab active:cursor-grabbing touch-pan-y will-change-scroll transform-gpu"
                 onMouseDown={handleMouseDown}
                 onMouseLeave={handleMouseLeave}
                 onMouseUp={handleMouseUp}

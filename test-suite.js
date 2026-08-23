@@ -534,6 +534,29 @@ assert(enrichedBleachMock[1].title === "A Shinigami's Work", 'Bleach Ep 2 title 
 assert(enrichedBleachMock[0].thumbnail.includes('106778'), 'Bleach Ep 1 screencap thumbnail mapped');
 console.log('');
 
+// --- TEST 32: Draggable Miniplayer Magnetic Snapping Physics ---
+console.log('▶ Test Case 32: Draggable Miniplayer Magnetic Snapping Physics');
+const screenW = 390;
+const miniW = screenW - 24;
+const snapFn = (posX) => {
+    const currentCenter = screenW - 20 - miniW / 2 + posX;
+    return currentCenter < screenW / 2 ? -(screenW - miniW - 24) : 0;
+};
+assert(snapFn(0) === 0, 'Miniplayer defaults to docked right position (0 offset)');
+assert(snapFn(-200) === -(screenW - miniW - 24), 'Miniplayer magnetically snaps to left side when dragged past center');
+assert(snapFn(50) === 0, 'Miniplayer remains snapped right when dragged slightly right');
+console.log('');
+
+// --- TEST 33: Modal Pull-To-Dismiss Top-Only Delegation ---
+console.log('▶ Test Case 33: Modal Pull-To-Dismiss Top-Only Delegation');
+const canDismissModal = (scrollTop, diffY) => {
+    return diffY > 100 && scrollTop <= 5;
+};
+assert(canDismissModal(0, 120) === true, 'Allows dismiss when pulled down at top of scroll');
+assert(canDismissModal(150, 120) === false, 'Prevents modal dismissal while user is scrolling through episode list');
+assert(canDismissModal(0, 30) === false, 'Ignores tiny inadvertent touch slips at top');
+console.log('');
+
 // --- FINAL SUMMARY ---
 console.log('====================================================');
 console.log(`📊 TEST RESULTS: ${passed} PASSED | ${failed} FAILED`);

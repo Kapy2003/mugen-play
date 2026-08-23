@@ -29,7 +29,8 @@ const AnimeCard = memo(({ anime, onClick }) => {
                         alt={displayTitle}
                         loading="lazy"
                         decoding="async"
-                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                        draggable="false"
+                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 pointer-events-none select-none"
                     />
                 ) : (
                     <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">

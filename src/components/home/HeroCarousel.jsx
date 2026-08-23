@@ -45,6 +45,14 @@ const HeroCarousel = memo(({ items, onPlay, onInfo }) => {
         const touch = e.touches ? e.touches[0] : e;
         dragRef.current.currentX = touch.clientX || touch.pageX || 0;
         dragRef.current.currentY = touch.clientY || touch.pageY || 0;
+
+        const diffX = Math.abs(dragRef.current.currentX - dragRef.current.startX);
+        const diffY = Math.abs(dragRef.current.currentY - dragRef.current.startY);
+
+        // If user is scrolling vertically, immediately release carousel drag so page scrolls smoothly
+        if (diffY > diffX && diffY > 8) {
+            dragRef.current.isDragging = false;
+        }
     };
 
     const handleTouchEnd = () => {

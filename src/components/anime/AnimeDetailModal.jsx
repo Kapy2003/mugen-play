@@ -7,6 +7,7 @@ const AnimeDetailModal = memo(({ anime, onClose, onPlay, onToggleFavorite, isFav
     const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
     const [episodeViewMode, setEpisodeViewMode] = useState('cards'); // 'cards' | 'pills'
     const touchStartRef = useRef(null);
+    const modalContentRef = useRef(null);
 
     const coverSrc = anime?.coverUrl || anime?.image || anime?.poster;
     const bannerSrc = anime?.bannerUrl || anime?.bannerImage || coverSrc;
@@ -69,15 +70,24 @@ const AnimeDetailModal = memo(({ anime, onClose, onPlay, onToggleFavorite, isFav
         return epNum < anime.nextAiringEpisode.episode;
     };
 
-    // Pull-to-dismiss gesture handling for mobile
+    // Pull-to-dismiss gesture handling for mobile (only triggers at top of scroll on deliberate downward pull)
     const handleTouchStart = (e) => {
-        touchStartRef.current = e.touches[0].clientY;
+        if (modalContentRef.current && modalContentRef.current.scrollTop <= 2 && e.touches?.[0]) {
+            touchStartRef.current = {
+                x: e.touches[0].clientX,
+                y: e.touches[0].clientY
+            };
+        } else {
+            touchStartRef.current = null;
+        }
     };
 
     const handleTouchEnd = (e) => {
-        if (touchStartRef.current === null) return;
-        const diffY = e.changedTouches[0].clientY - touchStartRef.current;
-        if (diffY > 90) {
+        if (touchStartRef.current === null || !e.changedTouches?.[0]) return;
+        const diffY = e.changedTouches[0].clientY - touchStartRef.current.y;
+        const diffX = e.changedTouches[0].clientX - touchStartRef.current.x;
+        // Only dismiss if deliberately pulled downwards from the top
+        if (diffY > 100 && diffY > Math.abs(diffX) * 1.5 && modalContentRef.current && modalContentRef.current.scrollTop <= 5) {
             onClose();
         }
         touchStartRef.current = null;
@@ -96,25 +106,27 @@ const AnimeDetailModal = memo(({ anime, onClose, onPlay, onToggleFavorite, isFav
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md animate-fade-in">
             <div
+                ref={modalContentRef}
                 onTouchStart={handleTouchStart}
                 onTouchEnd={handleTouchEnd}
-                className="relative w-full max-w-3xl max-h-[88vh] sm:max-h-[90vh] overflow-y-auto bg-[#101014] rounded-2xl sm:rounded-3xl shadow-2xl border border-white/10 animate-scale-in custom-scrollbar smooth-transition"
+                className="relative w-full max-w-3xl max-h-[88vh] sm:max-h-[90vh] overflow-y-auto bg-[#101014] rounded-2xl sm:rounded-3xl shadow-2xl border border-white/10 animate-scale-in custom-scrollbar smooth-transition touch-pan-y overscroll-contain"
             >
                 {/* Mobile Pull Bar Indicator */}
                 <div className="sm:hidden absolute top-2.5 left-1/2 -translate-x-1/2 w-12 h-1 bg-white/30 rounded-full z-30 pointer-events-none" />
 
                 {/* Banner with gradient overlay */}
-                <div className="h-36 sm:h-52 relative overflow-hidden group bg-gray-900">
+                <div className="h-36 sm:h-52 relative overflow-hidden group bg-gray-900 touch-pan-y">
                     {bannerSrc ? (
                         <img
                             src={bannerSrc}
                             alt={displayTitle}
                             loading="eager"
                             decoding="async"
-                            className={`w-full h-full object-cover transition-opacity duration-1000 ${showTrailer && anime.trailer?.site === 'youtube' ? 'opacity-0 absolute' : 'opacity-100'}`}
+                            draggable="false"
+                            className={`w-full h-full object-cover transition-opacity duration-1000 pointer-events-none select-none ${showTrailer && anime.trailer?.site === 'youtube' ? 'opacity-0 absolute' : 'opacity-100'}`}
                         />
                     ) : (
-                        <div className="w-full h-full bg-gradient-to-br from-gray-900 to-gray-950" />
+                        <div className="w-full h-full bg-gradient-to-br from-gray-900 to-gray-950 pointer-events-none" />
                     )}
 
                     {showTrailer && anime.trailer && anime.trailer.site === 'youtube' && (

@@ -163,32 +163,80 @@ function App() {
 
     const [currentEpisodePage, setCurrentEpisodePage] = useState(1); // Pagination
     const [isDesktop, setIsDesktop] = useState(() => typeof window !== 'undefined' ? window.innerWidth >= 1024 : true);
-    const playerTouchStartRef = useRef({ x: 0, y: 0 });
+    
+    // Draggable Miniplayer Position & Drag Physics
+    const [miniPosition, setMiniPosition] = useState({ x: 0, y: 0 });
+    const [isDraggingMini, setIsDraggingMini] = useState(false);
+    const miniDragOriginRef = useRef({ startX: 0, startY: 0, initX: 0, initY: 0, hasMoved: false });
+    const headerTouchStartRef = useRef({ x: 0, y: 0 });
 
-    const handlePlayerTouchStart = (e) => {
+    const handleMiniPointerDown = (clientX, clientY) => {
+        setIsDraggingMini(true);
+        miniDragOriginRef.current = {
+            startX: clientX,
+            startY: clientY,
+            initX: miniPosition.x,
+            initY: miniPosition.y,
+            hasMoved: false
+        };
+    };
+
+    const handleMiniPointerMove = (clientX, clientY) => {
+        if (!isDraggingMini) return;
+        const dx = clientX - miniDragOriginRef.current.startX;
+        const dy = clientY - miniDragOriginRef.current.startY;
+        if (Math.abs(dx) > 4 || Math.abs(dy) > 4) {
+            miniDragOriginRef.current.hasMoved = true;
+        }
+        setMiniPosition({
+            x: miniDragOriginRef.current.initX + dx,
+            y: miniDragOriginRef.current.initY + dy
+        });
+    };
+
+    const handleMiniPointerUp = (clientX) => {
+        if (!isDraggingMini) return;
+        setIsDraggingMini(false);
+        const dx = clientX - miniDragOriginRef.current.startX;
+
+        // Dismiss if swiped off-screen horizontally (> 140px)
+        if (Math.abs(dx) > 140) {
+            setPlayingAnime(null);
+            setMiniPosition({ x: 0, y: 0 });
+            return;
+        }
+
+        // Magnetic Snap to Nearest Screen Boundary
+        if (typeof window !== 'undefined') {
+            const screenW = window.innerWidth;
+            const screenH = window.innerHeight;
+            const miniW = screenW < 640 ? screenW - 24 : 384;
+            const currentCenter = screenW - 20 - miniW / 2 + miniPosition.x;
+            const targetSnapX = currentCenter < screenW / 2 ? -(screenW - miniW - 24) : 0;
+
+            const minY = -(screenH - 280);
+            const clampedY = Math.min(0, Math.max(minY, miniPosition.y));
+
+            setMiniPosition({ x: targetSnapX, y: clampedY });
+        }
+    };
+
+    // Fullscreen Topbar Pull-to-Minimize Handlers
+    const handleHeaderTouchStart = (e) => {
         if (e.touches?.[0]) {
-            playerTouchStartRef.current = {
+            headerTouchStartRef.current = {
                 x: e.touches[0].clientX,
                 y: e.touches[0].clientY
             };
         }
     };
 
-    const handlePlayerTouchEnd = (e) => {
+    const handleHeaderTouchEnd = (e) => {
         if (!e.changedTouches?.[0]) return;
-        const diffX = e.changedTouches[0].clientX - playerTouchStartRef.current.x;
-        const diffY = e.changedTouches[0].clientY - playerTouchStartRef.current.y;
-
-        if (isPlayerMinimized) {
-            // Swiped horizontally on miniplayer -> Dismiss
-            if (Math.abs(diffX) > 80 && Math.abs(diffX) > Math.abs(diffY)) {
-                setPlayingAnime(null);
-            }
-        } else {
-            // Swiped down from header/top area -> Minimize
-            if (diffY > 80 && diffY > Math.abs(diffX)) {
-                setIsPlayerMinimized(true);
-            }
+        const diffY = e.changedTouches[0].clientY - headerTouchStartRef.current.y;
+        const diffX = e.changedTouches[0].clientX - headerTouchStartRef.current.x;
+        if (diffY > 60 && diffY > Math.abs(diffX)) {
+            setIsPlayerMinimized(true);
         }
     };
 
@@ -1666,13 +1714,68 @@ function App() {
                 {/* Unified Persistent Player Overlay */}
                 {playingAnime && (
                     <div
-                        onTouchStart={handlePlayerTouchStart}
-                        onTouchEnd={handlePlayerTouchEnd}
-                        className={`fixed z-50 bg-[#0a0a0a] playback-modal text-white flex flex-col font-sans transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] shadow-2xl overflow-hidden ${isPlayerMinimized ? 'bottom-20 sm:bottom-6 right-3 sm:right-6 w-[calc(100vw-24px)] sm:w-96 h-48 sm:h-56 rounded-2xl border border-white/10 ring-1 ring-black/50 shadow-2xl' : 'inset-0 rounded-none'}`}
+                        onTouchStart={(e) => {
+                            if (isPlayerMinimized && e.touches?.[0]) {
+                                handleMiniPointerDown(e.touches[0].clientX, e.touches[0].clientY);
+                            }
+                        }}
+                        onTouchMove={(e) => {
+                            if (isPlayerMinimized && e.touches?.[0]) {
+                                handleMiniPointerMove(e.touches[0].clientX, e.touches[0].clientY);
+                            }
+                        }}
+                        onTouchEnd={(e) => {
+                            if (isPlayerMinimized && e.changedTouches?.[0]) {
+                                handleMiniPointerUp(e.changedTouches[0].clientX);
+                            }
+                        }}
+                        onMouseDown={(e) => {
+                            if (isPlayerMinimized) {
+                                handleMiniPointerDown(e.clientX, e.clientY);
+                                const onMouseMove = (moveEvent) => {
+                                    handleMiniPointerMove(moveEvent.clientX, moveEvent.clientY);
+                                };
+                                const onMouseUp = (upEvent) => {
+                                    handleMiniPointerUp(upEvent.clientX);
+                                    window.removeEventListener('mousemove', onMouseMove);
+                                    window.removeEventListener('mouseup', onMouseUp);
+                                };
+                                window.addEventListener('mousemove', onMouseMove);
+                                window.addEventListener('mouseup', onMouseUp);
+                            }
+                        }}
+                        onClick={() => {
+                            if (isPlayerMinimized && !miniDragOriginRef.current.hasMoved) {
+                                setIsPlayerMinimized(false);
+                            }
+                        }}
+                        style={isPlayerMinimized ? {
+                            transform: `translate3d(${miniPosition.x}px, ${miniPosition.y}px, 0)`,
+                            transition: isDraggingMini ? 'none' : 'transform 0.4s cubic-bezier(0.32, 0.72, 0, 1)'
+                        } : undefined}
+                        className={`fixed z-50 bg-[#0a0a0a] playback-modal text-white flex flex-col font-sans transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] shadow-2xl overflow-hidden ${
+                            isPlayerMinimized
+                                ? 'bottom-20 sm:bottom-6 right-3 sm:right-6 w-[calc(100vw-24px)] sm:w-96 h-48 sm:h-56 rounded-2xl border border-white/15 ring-1 ring-black/50 shadow-2xl cursor-grab active:cursor-grabbing select-none'
+                                : 'inset-0 rounded-none'
+                        }`}
                     >
+                        {/* Draggable Indicator Handle for Miniplayer */}
+                        {isPlayerMinimized && (
+                            <div className="absolute top-1.5 left-1/2 -translate-x-1/2 z-[130] pointer-events-none">
+                                <div className="w-10 h-1 rounded-full bg-white/40 shadow-sm" />
+                            </div>
+                        )}
+
                         {/* Top Navigation Bar (Full Screen Only) */}
                         {!isPlayerMinimized && (
-                            <div className="h-16 flex items-center justify-between px-4 sm:px-6 bg-[#050505] playback-topbar border-b border-white/5 z-20 gap-3 sm:gap-4 animate-fade-in shrink-0">
+                            <div
+                                onTouchStart={handleHeaderTouchStart}
+                                onTouchEnd={handleHeaderTouchEnd}
+                                className="h-16 flex items-center justify-between px-4 sm:px-6 bg-[#050505] playback-topbar border-b border-white/5 z-20 gap-3 sm:gap-4 animate-fade-in shrink-0 relative select-none"
+                            >
+                                {/* Pull-down to minimize indicator bar on mobile topbar */}
+                                <div className="sm:hidden absolute top-1.5 left-1/2 -translate-x-1/2 w-10 h-1 bg-white/30 rounded-full pointer-events-none" />
+
                                 <div className="flex items-center gap-2 flex-1 min-w-0">
                                     <button
                                         onClick={() => setIsPlayerMinimized(true)}
