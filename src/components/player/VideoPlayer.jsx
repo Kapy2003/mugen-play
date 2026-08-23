@@ -2,6 +2,13 @@ import { useState, useEffect, useRef } from 'react';
 import { RefreshCw, Settings, Check, AlertTriangle, Link, Edit3, Copy, CheckCheck, X, Sliders, RotateCcw, ZoomIn, ZoomOut, ChevronUp, ChevronDown, Crop, ShoppingBag } from 'lucide-react';
 import Hls from 'hls.js';
 
+// Unregister any stale service workers on page load to avoid cached 404 iframe responses
+if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations().then(regs => {
+        regs.forEach(reg => reg.unregister());
+    });
+}
+
 const VideoPlayer = ({
     src,
     poster,
@@ -23,6 +30,8 @@ const VideoPlayer = ({
     const [isRetrying, setIsRetrying] = useState(false);
     const [key, setKey] = useState(0);
     const [playerType, setPlayerType] = useState('iframe');
+    // Tracks whether loadError was manually forced by the user (diagnostic button)
+    const manualErrorRef = useRef(false);
 
     // Editable Link State
     const [isEditingLink, setIsEditingLink] = useState(false);
@@ -51,8 +60,12 @@ const VideoPlayer = ({
         setCurrentQuality(-1);
 
         const isInvalid = !src || src === 'null' || src === '' || src.includes('undefined');
-        setLoadError(isInvalid);
-        if (!isInvalid) {
+        if (isInvalid) {
+            setLoadError(true);
+            manualErrorRef.current = true;
+        } else {
+            manualErrorRef.current = false;
+            setLoadError(false);
             setKey(k => k + 1);
         }
 
@@ -68,6 +81,7 @@ const VideoPlayer = ({
     const handleRetry = async () => {
         if (isRetrying) return;
         setIsRetrying(true);
+        manualErrorRef.current = false;
         setLoadError(false);
         try {
             if (onRetry) {
@@ -81,82 +95,61 @@ const VideoPlayer = ({
         }
     };
 
-    // Automated 404 & Broken Stream Detection
+    // Automated 404 Detection — triggers mascot if "Oops! 404" / "404 Not Found" detected
     useEffect(() => {
+        if (manualErrorRef.current) return;
+
         if (!activeSrc || activeSrc === 'null' || activeSrc === '' || activeSrc.includes('undefined')) {
             setLoadError(true);
             return;
         }
 
-        if (
-            activeSrc.includes('404') ||
-            activeSrc.toLowerCase().includes('not-found') ||
-            activeSrc.toLowerCase().includes('notfound') ||
-            activeSrc.toLowerCase().includes('oops')
-        ) {
-            setLoadError(true);
-            return;
-        }
+        if (!activeSrc.startsWith('http')) return;
 
         let isCancelled = false;
 
-        const checkStreamReachability = async () => {
-            if (!activeSrc.startsWith('http')) return;
-
+        const check404Content = async () => {
             const PROXIES = [
-                (url) => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
-                (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-                (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`
+                { name: 'corsproxy', fn: (url) => `https://corsproxy.io/?url=${encodeURIComponent(url)}` },
+                { name: 'allorigins', fn: (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}` },
+                { name: 'codetabs', fn: (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}` }
             ];
 
-            for (const proxyFn of PROXIES) {
+            for (const proxy of PROXIES) {
                 if (isCancelled) break;
                 try {
                     const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 3000);
-                    const proxiedUrl = proxyFn(activeSrc);
-
-                    const res = await fetch(proxiedUrl, {
-                        signal: controller.signal
-                    });
+                    const timeoutId = setTimeout(() => controller.abort(), 5000);
+                    const res = await fetch(proxy.fn(activeSrc), { signal: controller.signal });
                     clearTimeout(timeoutId);
 
-                    if (res && (res.status === 404 || res.status === 410 || res.status === 502 || res.status === 503)) {
+                    if (!res) continue;
+
+                    console.log(`[MugenPlay] 404 check via ${proxy.name}: status=${res.status}`);
+
+                    // HTTP 404 status → trigger mascot immediately
+                    if (res.status === 404) {
                         if (!isCancelled) setLoadError(true);
-                        break;
+                        return;
                     }
 
-                    if (res && res.ok) {
-                        const text = await res.text();
-                        const lower = text.toLowerCase();
-                        const has404Indicator =
-                            lower.includes('oops! 404') ||
-                            lower.includes('404 not found') ||
-                            lower.includes('404 - not found') ||
-                            lower.includes('page not found') ||
-                            lower.includes('video not found') ||
-                            lower.includes('episode not found') ||
-                            lower.includes('cannot find') ||
-                            (lower.includes('404') && (lower.includes('error') || lower.includes('oops') || lower.includes('not found')));
-
-                        if (has404Indicator) {
-                            if (!isCancelled) setLoadError(true);
-                            break;
-                        }
-                        // Successfully verified live stream without 404
-                        break;
+                    const text = (await res.text()).toLowerCase();
+                    if (text.includes('oops! 404') || text.includes('404 not found')) {
+                        console.log(`[MugenPlay] 404 text detected via ${proxy.name}`);
+                        if (!isCancelled) setLoadError(true);
                     }
-                } catch {
-                    // Try next proxy
+                    return; // got a response, done
+                } catch (err) {
+                    console.log(`[MugenPlay] ${proxy.name} failed:`, err.message);
                 }
             }
+            // All proxies failed — couldn't verify, iframe will show as-is
+            console.log('[MugenPlay] All proxies failed, cannot verify stream');
         };
 
-        checkStreamReachability();
+        check404Content();
 
-        return () => {
-            isCancelled = true;
-        };
+        return () => { isCancelled = true; };
     }, [activeSrc, key]);
 
     // Live sync viewport offsets and zoom without triggering player remount
@@ -279,24 +272,14 @@ const VideoPlayer = ({
         setShowQualityMenu(false);
     };
 
+    const is404 = Boolean(loadError);
+    const isUnplayable = is404 ||
+        !activeSrc ||
+        activeSrc === 'null' ||
+        activeSrc === '' ||
+        activeSrc.includes('undefined');
+
     const renderPlayer = () => {
-        const is404 = Boolean(
-            loadError ||
-            (activeSrc && (
-                activeSrc.includes('404') ||
-                activeSrc.toLowerCase().includes('not-found') ||
-                activeSrc.toLowerCase().includes('notfound') ||
-                activeSrc.toLowerCase().includes('oops')
-            ))
-        );
-
-        const isUnplayable = is404 ||
-            !activeSrc ||
-            activeSrc === 'null' ||
-            activeSrc === '' ||
-            activeSrc.includes('undefined') ||
-            activeSrc.includes('error-page');
-
         if (isUnplayable) {
             if (isMinimized) {
                 return (
@@ -579,7 +562,7 @@ const VideoPlayer = ({
                         const doc = e.target.contentDocument || e.target.contentWindow?.document;
                         if (doc) {
                             const text = (doc.body?.innerText || doc.title || '').toLowerCase();
-                            if (text.includes('404') || text.includes('oops') || text.includes('not found')) {
+                            if (text.includes('oops! 404') || text.includes('404 not found')) {
                                 setLoadError(true);
                             }
                         }
@@ -619,7 +602,11 @@ const VideoPlayer = ({
 
                         {/* Report Broken / Force 404 Mascot Diagnostic */}
                         <button
-                            onClick={() => setLoadError(true)}
+                            onClick={() => {
+                                manualErrorRef.current = true;
+                                setLoadError(true);
+                                console.log('[MugenPlay] Manual error triggered via diagnostic button');
+                            }}
                             className="px-2.5 py-1 bg-red-500/15 hover:bg-red-500/25 text-red-400 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer border border-red-500/30"
                             title="Trigger 404 / broken stream diagnosis"
                         >
@@ -830,7 +817,40 @@ const VideoPlayer = ({
                 onContextMenu={(e) => e.preventDefault()}
             >
                 {renderPlayer()}
+
+                {/* Always-accessible Stream Broken / 404 Trigger for Embedded Streams */}
+                {!isUnplayable && playerType === 'iframe' && (
+                    <button
+                        onClick={() => {
+                            manualErrorRef.current = true;
+                            setLoadError(true);
+                            console.log('[MugenPlay] Manual error triggered via stream broken button');
+                        }}
+                        className="absolute top-2.5 right-2.5 z-30 px-2.5 py-1 bg-black/75 hover:bg-black/95 text-red-400 hover:text-red-300 rounded-lg text-xs font-bold flex items-center gap-1.5 backdrop-blur-md border border-red-500/40 shadow-lg transition-all opacity-85 hover:opacity-100 cursor-pointer active:scale-95"
+                        title="If stream is 404 or fails to load, tap to open mascot & switch source"
+                    >
+                        <AlertTriangle size={13} className="text-red-400" />
+                        <span className="hidden sm:inline">Stream Broken?</span>
+                    </button>
+                )}
             </div>
+
+            {/* Embedded Stream Helper Notice */}
+            {!isUnplayable && playerType === 'iframe' && (
+                <div className="flex items-center justify-between px-2 text-[11px] text-gray-500">
+                    <span>Streaming via embedded source</span>
+                    <button
+                        onClick={() => {
+                            manualErrorRef.current = true;
+                            setLoadError(true);
+                        }}
+                        className="text-red-400 hover:text-red-300 hover:underline cursor-pointer flex items-center gap-1"
+                    >
+                        <AlertTriangle size={11} />
+                        <span>Stream 404 / broken? Switch source</span>
+                    </button>
+                </div>
+            )}
         </div>
     );
 };
