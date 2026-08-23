@@ -110,6 +110,7 @@ export const AnimeUrlResolver = {
         const romajiSlug = this.toSlug(cleanRomaji);
         const preferredSlug = this.toSlug(cleanPreferred) || 'anime';
         const gogoSlug = this.resolveGogoSlug(cleanEnglish, cleanRomaji, cleanPreferred);
+        const hianimeSlug = this.resolveHiAnimeSlug(cleanEnglish, cleanRomaji, cleanPreferred);
         const primarySlug = englishSlug || preferredSlug || romajiSlug;
         const aniId = anime?.id && !isNaN(anime.id) ? anime.id : primarySlug;
 
@@ -121,7 +122,7 @@ export const AnimeUrlResolver = {
             const extId = (targetExt.id || '').toLowerCase();
 
             if (extId.includes('hianime') || host.includes('hianime')) {
-                streamUrl = `https://hianime.ad/watch/${primarySlug}/ep-${ep}`;
+                streamUrl = `https://hianime.ad/watch/${hianimeSlug}/ep-${ep}`;
             } else if (extId.includes('anikoto') || host.includes('anikoto')) {
                 streamUrl = `https://anikoto.cz/watch/${primarySlug}?ep=${ep}`;
             } else if (extId.includes('animepahe') || host.includes('animepahe')) {
@@ -194,71 +195,55 @@ export const AnimeUrlResolver = {
     },
 
     /**
-     * Resolves precise slugs for complex franchise titles (e.g. Bleach Thousand-Year Blood War)
+     * Algorithmic, data-driven slug resolver for HiAnime (English-first)
+     */
+    resolveHiAnimeSlug(english, romaji, preferred) {
+        const titles = [english, preferred, romaji].filter(Boolean);
+        for (const raw of titles) {
+            const processed = raw
+                .replace(/\s*\(TV\)\s*/gi, '-tv')
+                .replace(/\s*\(Movie\)\s*/gi, '-movie')
+                .replace(/\s*\(Season (\d+)\)\s*/gi, ' season $1')
+                .replace(/\s*\(Dub\)\s*/gi, '')
+                .replace(/\s*\(Sub\)\s*/gi, '')
+                .replace(/\s*\(Uncensored\)\s*/gi, '');
+
+            const slug = this.toSlug(processed);
+            if (slug) return slug;
+        }
+        return 'anime';
+    },
+
+    /**
+     * Algorithmic, data-driven slug resolver for GogoAnime (Romaji/English)
      */
     resolveGogoSlug(english, romaji, preferred) {
-        const full = `${english} ${romaji} ${preferred}`.toLowerCase();
+        const titles = [romaji, english, preferred].filter(Boolean);
+        for (const raw of titles) {
+            const processed = raw
+                .replace(/\s*\(TV\)\s*/gi, '')
+                .replace(/\s*\(Movie\)\s*/gi, '-movie')
+                .replace(/\s*\(Season (\d+)\)\s*/gi, ' season $1')
+                .replace(/\s*\(Dub\)\s*/gi, '')
+                .replace(/\s*\(Sub\)\s*/gi, '')
+                .replace(/\s*\(Uncensored\)\s*/gi, '');
 
-        if (full.includes('thousand-year blood war') || full.includes('sennen kessen-hen') || full.includes('tybw')) {
-            if (full.includes('the conflict') || full.includes('calamity') || full.includes('soukoku') || full.includes('part 3') || full.includes('part-3')) {
-                return 'bleach-sennen-kessen-hen-soukoku-tan';
-            }
-            if (full.includes('the separation') || full.includes('ketsubetsu') || full.includes('part 2') || full.includes('part-2')) {
-                return 'bleach-sennen-kessen-hen-ketsubetsu-tan';
-            }
-            return 'bleach-sennen-kessen-hen';
+            const slug = this.toSlug(processed);
+            if (slug) return slug;
         }
-
-        if (full.includes('solo leveling') || full.includes('ore dake level up')) {
-            if (full.includes('season 2') || full.includes('arise from the shadow')) {
-                return 'ore-dake-level-up-na-ken-season-2-arise-from-the-shadow';
-            }
-            return 'ore-dake-level-up-na-ken';
-        }
-
-        if (full.includes('jujutsu kaisen')) {
-            if (full.includes('season 2') || full.includes('shibuya')) {
-                return 'jujutsu-kaisen-2nd-season';
-            }
-            return 'jujutsu-kaisen-tv';
-        }
-
-        if (full.includes('demon slayer') || full.includes('kimetsu no yaiba')) {
-            if (full.includes('hashira training')) return 'kimetsu-no-yaiba-hashira-geiko-hen';
-            if (full.includes('swordsmith')) return 'kimetsu-no-yaiba-katanakaji-no-sato-hen';
-            if (full.includes('entertainment') || full.includes('yuukaku')) return 'kimetsu-no-yaiba-yuukaku-hen';
-            if (full.includes('mugen train')) return 'kimetsu-no-yaiba-mugen-ressha-hen-tv';
-            return 'kimetsu-no-yaiba';
-        }
-
-        if (full.includes('attack on titan') || full.includes('shingeki no kyojin')) {
-            if (full.includes('final season part 3') || full.includes('kanketsu-hen')) return 'shingeki-no-kyojin-the-final-season-kanketsu-hen';
-            if (full.includes('final season part 2')) return 'shingeki-no-kyojin-the-final-season-part-2';
-            if (full.includes('final season')) return 'shingeki-no-kyojin-the-final-season';
-            if (full.includes('season 3 part 2')) return 'shingeki-no-kyojin-season-3-part-2';
-            if (full.includes('season 3')) return 'shingeki-no-kyojin-season-3';
-            if (full.includes('season 2')) return 'shingeki-no-kyojin-season-2';
-            return 'shingeki-no-kyojin';
-        }
-
-        if (full.includes('one piece')) return 'one-piece';
-        if (full.includes('naruto shippuden')) return 'naruto-shippuuden';
-        if (full.includes('naruto')) return 'naruto';
-        if (full.includes('chainsaw man')) return 'chainsaw-man';
-
         return this.toSlug(preferred || english || romaji);
     },
 
     sanitizeTitle(str) {
         if (!str || typeof str !== 'string') return '';
         return str
-            .replace(/\s*\(TV\)\s*/gi, '')
+            .replace(/\s*\(TV\)\s*/gi, '-tv')
+            .replace(/\s*\(Movie\)\s*/gi, '-movie')
             .replace(/\s*\(Season \d+\)\s*/gi, '')
             .replace(/\s*\(Dub\)\s*/gi, '')
             .replace(/\s*\(Sub\)\s*/gi, '')
             .replace(/\s*\(Uncensored\)\s*/gi, '')
-            .replace(/['":]/g, '')
-            .replace(/[^\w\s-]/gi, ' ')
+            .replace(/['":;!?~@#$%^*+=_`|<>{}[\]()]/g, ' ')
             .replace(/\s+/g, ' ')
             .trim();
     },
@@ -267,8 +252,11 @@ export const AnimeUrlResolver = {
         if (!str || typeof str !== 'string') return '';
         return str
             .toLowerCase()
-            .replace(/['":]/g, '')
-            .replace(/[^a-z0-9]+/g, '-')
-            .replace(/^-+|-+$/g, '');
+            .replace(/&/g, 'and')
+            .replace(/['"’]/g, '')
+            .replace(/[^a-z0-9\s-]/g, ' ')
+            .replace(/\s+/g, '-')
+            .replace(/-+/g, '-')
+            .replace(/^-|-$/g, '');
     }
 };
