@@ -26,7 +26,7 @@ const HeroCarousel = memo(({ items, onPlay, onInfo }) => {
         return () => clearInterval(interval);
     }, [items, isHovered]);
 
-    // Drag / Touch Swipe Handlers (using refs to avoid re-rendering on every mousemove)
+    // Drag / Touch Swipe Handlers
     const handleTouchStart = (e) => {
         const touch = e.touches ? e.touches[0] : e;
         const clientX = touch.clientX || touch.pageX || 0;
@@ -49,8 +49,8 @@ const HeroCarousel = memo(({ items, onPlay, onInfo }) => {
         const diffX = Math.abs(dragRef.current.currentX - dragRef.current.startX);
         const diffY = Math.abs(dragRef.current.currentY - dragRef.current.startY);
 
-        // If user is scrolling vertically, immediately release carousel drag so page scrolls smoothly
-        if (diffY > diffX && diffY > 8) {
+        // If user is predominantly scrolling vertically, release carousel drag so page scrolls smoothly
+        if (diffY > diffX && diffY > 10) {
             dragRef.current.isDragging = false;
         }
     };
@@ -63,7 +63,7 @@ const HeroCarousel = memo(({ items, onPlay, onInfo }) => {
 
         const diffX = dragRef.current.currentX - dragRef.current.startX;
         const diffY = dragRef.current.currentY - dragRef.current.startY;
-        const threshold = 40;
+        const threshold = 35;
 
         if (dragRef.current.startX !== 0 && Math.abs(diffX) > threshold && Math.abs(diffX) > Math.abs(diffY)) {
             if (diffX > 0) {
@@ -97,7 +97,7 @@ const HeroCarousel = memo(({ items, onPlay, onInfo }) => {
     return (
         <div
             ref={containerRef}
-            className="relative h-[320px] sm:h-[480px] rounded-2xl sm:rounded-3xl overflow-hidden group mb-6 sm:mb-8 select-none touch-pan-y cursor-grab active:cursor-grabbing will-change-transform transform-gpu"
+            className="relative h-[200px] xs:h-[230px] sm:h-[340px] md:h-[420px] lg:h-[460px] rounded-2xl sm:rounded-3xl overflow-hidden group mb-5 sm:mb-8 select-none max-w-full shadow-xl bg-gray-900 border border-white/5"
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => {
                 setIsHovered(false);
@@ -116,111 +116,99 @@ const HeroCarousel = memo(({ items, onPlay, onInfo }) => {
                 alt={titleText}
                 loading="eager"
                 decoding="async"
-                className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 animate-fade-in pointer-events-none"
+                className="w-full h-full object-cover object-top sm:object-center transition-transform duration-700 group-hover:scale-105 animate-fade-in pointer-events-none"
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-gray-950 via-gray-950/40 to-transparent pointer-events-none">
-                {/* Top Right Navigation Buttons (Desktop) */}
-                <div
-                    className="absolute top-4 right-4 sm:top-6 sm:right-6 flex gap-2 z-20 pointer-events-auto"
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onTouchStart={(e) => e.stopPropagation()}
+            <div className="absolute inset-0 bg-gradient-to-t from-gray-950 via-gray-950/60 sm:via-gray-950/40 to-transparent pointer-events-none" />
+
+            {/* Top Right Navigation Buttons (Desktop Only) */}
+            <div className="hidden sm:flex absolute top-4 right-4 sm:top-6 sm:right-6 gap-2 z-20">
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        setCurrentIndex(prev => (prev - 1 + items.length) % items.length);
+                    }}
+                    className="carousel-nav-btn p-1.5 sm:p-2 bg-black/60 hover:bg-black/80 text-white rounded-full border border-white/10 transition-all hover:scale-105 cursor-pointer shadow-lg active:scale-95"
+                    title="Previous"
                 >
+                    <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
+                </button>
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        setCurrentIndex(prev => (prev + 1) % items.length);
+                    }}
+                    className="carousel-nav-btn p-1.5 sm:p-2 bg-black/60 hover:bg-black/80 text-white rounded-full border border-white/10 transition-all hover:scale-105 cursor-pointer shadow-lg active:scale-95"
+                    title="Next"
+                >
+                    <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
+                </button>
+            </div>
+
+            {/* Hero Info Overlay */}
+            <div className="absolute bottom-0 left-0 p-3 sm:p-7 md:p-9 w-full sm:w-4/5 md:w-3/4 space-y-1.5 sm:space-y-3 animate-slide-up pointer-events-none hero-protected-text z-10">
+                <div className="flex flex-wrap items-center gap-1 sm:gap-2">
+                    <span className="px-2 py-0.5 sm:px-3 sm:py-1 bg-red-600 text-white text-[9px] sm:text-xs font-black rounded-full uppercase tracking-wider shadow-md shadow-red-600/30 inline-block">
+                        #{safeIndex + 1} Trending
+                    </span>
+                    {featured.rating && (
+                        <span className="flex items-center gap-0.5 sm:gap-1 px-1.5 py-0.5 sm:px-3 sm:py-1 bg-black/90 text-amber-300 text-[9px] sm:text-xs font-black rounded-full border border-amber-400/60 shadow-sm">
+                            <Star className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 fill-amber-400 text-amber-400" />
+                            {Number(featured.rating) > 10 ? (Number(featured.rating) / 10).toFixed(1) : Number(featured.rating).toFixed(1)}
+                        </span>
+                    )}
+                    <span className="px-1.5 py-0.5 sm:px-3 sm:py-1 bg-black/90 text-white text-[9px] sm:text-xs font-black rounded-full border border-white/20 shadow-sm">
+                        {featured.year || 2024}
+                    </span>
+                    {featured.episodes && (
+                        <span className="px-1.5 py-0.5 sm:px-3 sm:py-1 bg-black/90 text-white text-[9px] sm:text-xs font-bold rounded-full border border-white/20 shadow-sm">
+                            {featured.episodes} Eps
+                        </span>
+                    )}
+                </div>
+                <h1 className="text-sm xs:text-base sm:text-2xl md:text-4xl font-black text-white leading-tight tracking-tight line-clamp-1 sm:line-clamp-2 drop-shadow-md">
+                    {titleText}
+                </h1>
+                <p className="hidden sm:block text-gray-200 line-clamp-2 text-xs sm:text-sm md:text-base max-w-2xl drop-shadow-sm font-medium">
+                    {featured.synopsis ? featured.synopsis.replace(/<[^>]*>?/gm, '') : ''}
+                </p>
+                <div className="flex items-center gap-2 sm:gap-3.5 pt-0.5 sm:pt-1">
                     <button
                         onClick={(e) => {
                             e.stopPropagation();
-                            setCurrentIndex(prev => (prev - 1 + items.length) % items.length);
+                            if (onPlay) onPlay(featured);
                         }}
-                        className="carousel-nav-btn p-1.5 sm:p-2 bg-black/40 hover:bg-black/70 backdrop-blur-sm rounded-full text-white border border-white/10 transition-all hover:scale-105 cursor-pointer shadow-lg"
-                        title="Previous"
+                        className="pointer-events-auto px-3.5 py-1.5 sm:px-6 sm:py-2.5 bg-red-600 hover:bg-red-700 text-white text-xs sm:text-sm font-bold rounded-lg sm:rounded-xl flex items-center gap-1 sm:gap-2 transition-all hover:scale-105 active:scale-95 shadow-md shadow-red-600/40 cursor-pointer"
                     >
-                        <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
+                        <Play className="w-3 h-3 sm:w-4 sm:h-4 fill-current" />
+                        Watch Now
                     </button>
                     <button
                         onClick={(e) => {
                             e.stopPropagation();
-                            setCurrentIndex(prev => (prev + 1) % items.length);
+                            if (onInfo) onInfo(featured);
                         }}
-                        className="carousel-nav-btn p-1.5 sm:p-2 bg-black/40 hover:bg-black/70 backdrop-blur-sm rounded-full text-white border border-white/10 transition-all hover:scale-105 cursor-pointer shadow-lg"
-                        title="Next"
+                        className="carousel-info-btn pointer-events-auto px-3 py-1.5 sm:px-5 sm:py-2.5 bg-black/60 hover:bg-black/80 text-white text-xs sm:text-sm font-bold rounded-lg sm:rounded-xl transition-all border border-white/20 hover:scale-105 active:scale-95 cursor-pointer shadow-sm"
                     >
-                        <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
+                        More Info
                     </button>
                 </div>
+            </div>
 
-                {/* Hero Info Overlay */}
-                <div
-                    className="absolute bottom-0 left-0 p-4 sm:p-10 w-full sm:w-3/4 space-y-2 sm:space-y-4 animate-slide-up pointer-events-auto hero-protected-text"
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onTouchStart={(e) => e.stopPropagation()}
-                >
-                    <div className="flex flex-wrap items-center gap-2">
-                        <span className="px-2.5 py-0.5 sm:px-3 sm:py-1 bg-red-600 text-white text-[10px] sm:text-xs font-black rounded-full uppercase tracking-wider shadow-lg shadow-red-600/30 inline-block">
-                            Trending #{safeIndex + 1}
-                        </span>
-                        {featured.rating && (
-                            <span className="flex items-center gap-1 px-2.5 py-0.5 sm:px-3 sm:py-1 bg-black/85 backdrop-blur-md text-amber-300 text-[10px] sm:text-xs font-black rounded-full border border-amber-400/60 shadow-md">
-                                <Star className="w-3 h-3 sm:w-3.5 sm:h-3.5 fill-amber-400 text-amber-400" />
-                                {Number(featured.rating) > 10 ? (Number(featured.rating) / 10).toFixed(1) : Number(featured.rating).toFixed(1)}
-                            </span>
-                        )}
-                        <span className="px-2.5 py-0.5 sm:px-3 sm:py-1 bg-black/85 backdrop-blur-md text-white text-[10px] sm:text-xs font-black rounded-full border border-white/20 shadow-md">
-                            {featured.year || 2024}
-                        </span>
-                        {featured.episodes && (
-                            <span className="px-2.5 py-0.5 sm:px-3 sm:py-1 bg-black/85 backdrop-blur-md text-white text-[10px] sm:text-xs font-bold rounded-full border border-white/20 shadow-md">
-                                {featured.episodes} Eps
-                            </span>
-                        )}
-                    </div>
-                    <h1 className="text-xl sm:text-4xl md:text-5xl font-black text-white leading-snug tracking-tight line-clamp-2">
-                        {titleText}
-                    </h1>
-                    <p className="text-gray-200 line-clamp-2 text-xs sm:text-base max-w-2xl">
-                        {featured.synopsis ? featured.synopsis.replace(/<[^>]*>?/gm, '') : ''}
-                    </p>
-                    <div className="flex items-center gap-2.5 sm:gap-4 pt-1 sm:pt-3">
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                if (onPlay) onPlay(featured);
-                            }}
-                            className="px-4 py-2 sm:px-8 sm:py-3 bg-red-600 hover:bg-red-700 text-white text-xs sm:text-sm font-bold rounded-xl flex items-center gap-1.5 sm:gap-2 transition-all hover:scale-105 active:scale-95 shadow-lg shadow-red-600/30 cursor-pointer"
-                        >
-                            <Play className="w-3.5 h-3.5 sm:w-5 sm:h-5 fill-current" />
-                            Watch Now
-                        </button>
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                if (onInfo) onInfo(featured);
-                            }}
-                            className="carousel-info-btn px-4 py-2 sm:px-8 sm:py-3 bg-black/40 hover:bg-black/60 backdrop-blur-md text-white text-xs sm:text-sm font-bold rounded-xl transition-all border border-white/20 hover:scale-105 active:scale-95 cursor-pointer shadow-md"
-                        >
-                            More Info
-                        </button>
-                    </div>
-                </div>
-
-                {/* Bottom Indicators */}
-                <div
-                    className="absolute bottom-4 right-4 sm:bottom-8 sm:right-8 flex gap-1.5 sm:gap-2 z-20 pointer-events-auto"
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onTouchStart={(e) => e.stopPropagation()}
-                >
-                    {items.map((_, idx) => (
-                        <button
-                            key={idx}
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setCurrentIndex(idx);
-                            }}
-                            className={`h-1.5 sm:h-2 rounded-full transition-all duration-300 cursor-pointer ${idx === safeIndex
-                                ? 'w-4 sm:w-6 bg-red-600'
-                                : 'w-1.5 sm:w-2 bg-white/30 hover:bg-white/60'
-                                }`}
-                        />
-                    ))}
-                </div>
+            {/* Bottom Indicators */}
+            <div className="absolute bottom-2.5 right-2.5 sm:bottom-5 sm:right-6 flex gap-1 sm:gap-1.5 z-20">
+                {items.slice(0, 10).map((_, idx) => (
+                    <button
+                        key={idx}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setCurrentIndex(idx);
+                        }}
+                        className={`h-1 sm:h-1.5 rounded-full transition-all duration-300 cursor-pointer ${idx === safeIndex
+                            ? 'w-3.5 sm:w-5 bg-red-600 shadow-sm shadow-red-600/50'
+                            : 'w-1 sm:w-1.5 bg-white/40 hover:bg-white/70'
+                            }`}
+                    />
+                ))}
             </div>
         </div>
     );

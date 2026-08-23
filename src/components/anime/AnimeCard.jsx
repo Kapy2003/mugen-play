@@ -19,7 +19,7 @@ const AnimeCard = memo(({ anime, onClick }) => {
 
     return (
         <div
-            className="group relative rounded-2xl overflow-hidden cursor-pointer transition-all duration-300 hover:shadow-2xl hover:-translate-y-1 hover:scale-[1.02] active:scale-[0.97] bg-gray-900 border border-gray-800 transform-gpu will-change-transform smooth-transition"
+            className="group relative rounded-2xl overflow-hidden cursor-pointer bg-gray-900 border border-gray-800 transition-transform duration-200 hover:scale-[1.02] hover:shadow-xl"
             onClick={() => onClick && onClick(anime)}
         >
             <div className="relative aspect-[2/3] overflow-hidden bg-gray-800">

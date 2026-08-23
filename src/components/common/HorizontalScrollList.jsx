@@ -96,7 +96,7 @@ const HorizontalScrollList = memo(({ title, icon: Icon, items, onItemClick, rend
 
             <div
                 ref={scrollRef}
-                className="flex gap-3 sm:gap-4 overflow-x-auto no-scrollbar scroll-smooth py-1 sm:py-2 select-none cursor-grab active:cursor-grabbing touch-pan-y will-change-scroll transform-gpu"
+                className="flex gap-3 sm:gap-4 overflow-x-auto no-scrollbar py-1 sm:py-2 select-none cursor-grab active:cursor-grabbing overscroll-x-contain"
                 onMouseDown={handleMouseDown}
                 onMouseLeave={handleMouseLeave}
                 onMouseUp={handleMouseUp}

@@ -74,7 +74,7 @@ const Sidebar = memo(({
                 onTouchEnd={handleSidebarTouchEnd}
                 className={`
           fixed top-0 left-0 z-40 h-screen bg-gray-900 border-r border-gray-800 transition-[width,transform] duration-200 ease-out
-          ${isMobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+          ${isMobileOpen ? 'translate-x-0 visible' : '-translate-x-full invisible lg:visible lg:translate-x-0'}
         `}
             >
                 {/* Drag Handle */}

@@ -25,35 +25,54 @@
     animation: slideUpSm 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
-  /* Hardware-accelerated 60fps micro-interactions */
+  /* Hardware-accelerated 120fps micro-interactions & ultra-fast Apple spring */
   .transform-gpu {
     transform: translateZ(0);
     backface-visibility: hidden;
     perspective: 1000px;
+    will-change: transform;
   }
 
-  .active-spring:active {
+  .active-spring:active,
+  .active-press:active {
     transform: scale(0.96);
-    transition: transform 0.12s cubic-bezier(0.4, 0, 0.2, 1);
+    opacity: 0.88;
+    transition: transform 0.12s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.12s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
   .smooth-transition {
-    transition: background-color 0.35s cubic-bezier(0.4, 0, 0.2, 1),
-                border-color 0.35s cubic-bezier(0.4, 0, 0.2, 1),
-                color 0.35s cubic-bezier(0.4, 0, 0.2, 1),
-                box-shadow 0.35s cubic-bezier(0.4, 0, 0.2, 1),
-                transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+                border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+                color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+                box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+                transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
-  /* Touch fluidity and momentum */
+  /* Touch fluidity, gesture isolation, and momentum scrolling */
   .touch-pan-y {
     touch-action: pan-y;
     -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
   }
 
   .touch-pan-x {
     touch-action: pan-x;
     -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+  }
+
+  .touch-pan-both {
+    touch-action: pan-x pan-y;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+
+  .touch-none {
+    touch-action: none;
+  }
+
+  .touch-manipulation {
+    touch-action: manipulation;
   }
 
   /* Hide scrollbar but keep functionality */
@@ -200,18 +219,38 @@
 }
 
 @layer base {
-  html, body {
+  *, *::before, *::after {
+    -webkit-tap-highlight-color: transparent;
+    box-sizing: border-box;
+  }
+
+  button, a, input, select, textarea, [role="button"] {
+    touch-action: manipulation;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
     font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     background-color: #08080a;
     color: #f8fafc;
     overflow-x: hidden;
-    max-width: 100vw;
+    width: 100%;
+    min-height: 100vh;
+    margin: 0;
+    padding: 0;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
     letter-spacing: -0.01em;
     -webkit-tap-highlight-color: transparent;
-    transition: background-color 0.35s cubic-bezier(0.4, 0, 0.2, 1), color 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  #root {
+    width: 100%;
+    min-height: 100vh;
   }
 
   h1, h2, h3, h4, h5, h6 {
@@ -986,8 +1025,111 @@
     backface-visibility: hidden;
   }
 
-  /* Optimize heavy background blur on budget mobile GPUs for 60fps/120Hz */
+  /* Disable heavy continuous GPU backdrop-filtering during fast mobile scrolling */
+  .backdrop-blur-md,
+  .backdrop-blur-xl,
+  .backdrop-blur-sm,
+  .backdrop-blur-\[1px\] {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+
   .playback-modal {
     contain: layout paint;
   }
+}
+
+/* ==========================================================================
+   Developer Options & Settings Storage/Cache Light Theme Overrides
+   ========================================================================== */
+
+.light-theme .dev-locked-card {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), #ffffff) !important;
+  border-color: #fcd34d !important;
+}
+
+.light-theme .dev-locked-card h3 {
+  color: #0f172a !important;
+}
+
+.light-theme .dev-locked-card p {
+  color: #64748b !important;
+}
+
+.light-theme .dev-unlocked-card {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.08), #ffffff 40%) !important;
+  border-color: #fcd34d !important;
+}
+
+.light-theme .dev-unlocked-card h3,
+.light-theme .dev-unlocked-card h4 {
+  color: #0f172a !important;
+}
+
+.light-theme .dev-unlocked-card p,
+.light-theme .dev-unlocked-card span {
+  color: #334155 !important;
+}
+
+.light-theme .settings-data-card {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.06), #ffffff 40%) !important;
+  border-color: #fecaca !important;
+  color: #0f172a !important;
+}
+
+.light-theme .settings-data-card h3 {
+  color: #0f172a !important;
+}
+
+.light-theme .settings-data-card p {
+  color: #64748b !important;
+}
+
+.light-theme .settings-data-card .settings-subcard {
+  background-color: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+}
+
+.light-theme .settings-data-card .settings-subcard span {
+  color: #0f172a !important;
+}
+
+.light-theme .settings-danger-btn {
+  background-color: #fef2f2 !important;
+  color: #dc2626 !important;
+  border-color: #fca5a5 !important;
+}
+
+.light-theme .settings-danger-btn:hover {
+  background-color: #fee2e2 !important;
+  border-color: #ef4444 !important;
+}
+
+.light-theme .settings-cache-btn {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+.light-theme .settings-cache-btn:hover {
+  background-color: #f1f5f9 !important;
+  border-color: #94a3b8 !important;
+}
+
+.light-theme .bg-gradient-to-r.from-amber-950\/80,
+.light-theme .bg-gradient-to-r.from-amber-950\/60,
+.light-theme .bg-gradient-to-r.from-amber-950\/40,
+.light-theme .bg-gradient-to-r.from-amber-950\/30,
+.light-theme .bg-gradient-to-r.from-amber-950\/20,
+.light-theme .bg-gradient-to-br.from-amber-950\/30 {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.12), #ffffff, #ffffff) !important;
+  border-color: #fcd34d !important;
+}
+
+.light-theme .bg-gradient-to-r.from-red-950\/80,
+.light-theme .bg-gradient-to-r.from-red-950\/60,
+.light-theme .bg-gradient-to-r.from-red-950\/40,
+.light-theme .bg-gradient-to-r.from-red-950\/20 {
+  background: linear-gradient(to right, rgba(239, 68, 68, 0.12), #ffffff, #ffffff) !important;
+  border-color: #fca5a5 !important;
 }

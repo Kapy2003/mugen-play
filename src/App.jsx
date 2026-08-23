@@ -14,7 +14,7 @@ import Toast from './components/common/Toast';
 import SplashScreen from './components/common/SplashScreen';
 import LegalDisclaimerModal from './components/common/LegalDisclaimerModal';
 import { INITIAL_EXTENSIONS } from './data/constants';
-import { Search, Play, ArrowLeft, X, Maximize2, PanelRight, Filter, Compass, Shuffle, Star, Heart, Code, Sliders, Link, Copy, Sun, Moon, Key, Lock, ChevronRight, Film, Flame, Trophy, RotateCcw } from 'lucide-react';
+import { Search, Play, ArrowLeft, X, Maximize2, PanelRight, Filter, Compass, Shuffle, Star, Heart, Code, Sliders, Link, Copy, Sun, Moon, Key, Lock, ChevronRight, Film, Flame, Trophy, RotateCcw, Trash2, RefreshCw, AlertTriangle } from 'lucide-react';
 import { AnilistSource } from './extensions/AnilistSource';
 import HeroCarousel from './components/home/HeroCarousel';
 import HorizontalScrollList from './components/common/HorizontalScrollList';
@@ -131,6 +131,7 @@ function App() {
     const [topRatedList, setTopRatedList] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
     const [isShelvesLoading, setIsShelvesLoading] = useState(false);
+    const heroCarouselItems = useMemo(() => (trendingList || []).slice(0, 10), [trendingList]);
     const [searchQuery, setSearchQuery] = useState('');
     const [page, setPage] = useState(1);
     const [hasNextPage, setHasNextPage] = useState(true); // Simplified: assume next unless empty result
@@ -164,62 +165,135 @@ function App() {
     const [currentEpisodePage, setCurrentEpisodePage] = useState(1); // Pagination
     const [isDesktop, setIsDesktop] = useState(() => typeof window !== 'undefined' ? window.innerWidth >= 1024 : true);
     
-    // Draggable Miniplayer Position & Drag Physics
-    const [miniPosition, setMiniPosition] = useState({ x: 0, y: 0 });
-    const [isDraggingMini, setIsDraggingMini] = useState(false);
-    const miniDragOriginRef = useRef({ startX: 0, startY: 0, initX: 0, initY: 0, hasMoved: false });
+    // Data Reset & Storage State
+    const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
+    const [isClearingCache, setIsClearingCache] = useState(false);
+
+    // Draggable Miniplayer Position & 120fps Hardware-Accelerated Physics
+    const miniPlayerRef = useRef(null);
+    const miniPosRef = useRef({ x: 0, y: 0 });
+    const miniDragOriginRef = useRef({ hasMoved: false });
     const headerTouchStartRef = useRef({ x: 0, y: 0 });
 
-    const handleMiniPointerDown = (clientX, clientY) => {
-        setIsDraggingMini(true);
-        miniDragOriginRef.current = {
-            startX: clientX,
-            startY: clientY,
-            initX: miniPosition.x,
-            initY: miniPosition.y,
-            hasMoved: false
+    useEffect(() => {
+        const miniEl = miniPlayerRef.current;
+        if (!miniEl || !isPlayerMinimized) return;
+
+        let isDragging = false;
+        let startX = 0;
+        let startY = 0;
+        let initX = 0;
+        let initY = 0;
+
+        const onPointerDown = (e) => {
+            // If touching close or expand button, let click pass through
+            if (e.target.closest('.minimized-btn') || e.target.closest('button')) {
+                return;
+            }
+            isDragging = true;
+            miniDragOriginRef.current.hasMoved = false;
+
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            startX = clientX;
+            startY = clientY;
+            initX = miniPosRef.current.x;
+            initY = miniPosRef.current.y;
+
+            miniEl.style.transition = 'none';
+            miniEl.style.willChange = 'transform';
         };
-    };
 
-    const handleMiniPointerMove = (clientX, clientY) => {
-        if (!isDraggingMini) return;
-        const dx = clientX - miniDragOriginRef.current.startX;
-        const dy = clientY - miniDragOriginRef.current.startY;
-        if (Math.abs(dx) > 4 || Math.abs(dy) > 4) {
-            miniDragOriginRef.current.hasMoved = true;
-        }
-        setMiniPosition({
-            x: miniDragOriginRef.current.initX + dx,
-            y: miniDragOriginRef.current.initY + dy
-        });
-    };
+        const onPointerMove = (e) => {
+            if (!isDragging) return;
+            // 100% prevent background page scrolling
+            if (e.cancelable) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
 
-    const handleMiniPointerUp = (clientX) => {
-        if (!isDraggingMini) return;
-        setIsDraggingMini(false);
-        const dx = clientX - miniDragOriginRef.current.startX;
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            const dx = clientX - startX;
+            const dy = clientY - startY;
 
-        // Dismiss if swiped off-screen horizontally (> 140px)
-        if (Math.abs(dx) > 140) {
-            setPlayingAnime(null);
-            setMiniPosition({ x: 0, y: 0 });
-            return;
-        }
+            if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+                miniDragOriginRef.current.hasMoved = true;
+            }
 
-        // Magnetic Snap to Nearest Screen Boundary
-        if (typeof window !== 'undefined') {
-            const screenW = window.innerWidth;
-            const screenH = window.innerHeight;
-            const miniW = screenW < 640 ? screenW - 24 : 384;
-            const currentCenter = screenW - 20 - miniW / 2 + miniPosition.x;
-            const targetSnapX = currentCenter < screenW / 2 ? -(screenW - miniW - 24) : 0;
+            const newX = initX + dx;
+            const newY = initY + dy;
+            miniPosRef.current = { x: newX, y: newY };
 
-            const minY = -(screenH - 280);
-            const clampedY = Math.min(0, Math.max(minY, miniPosition.y));
+            // Direct hardware transform at native 120fps
+            miniEl.style.transform = `translate3d(${newX}px, ${newY}px, 0)`;
+        };
 
-            setMiniPosition({ x: targetSnapX, y: clampedY });
-        }
-    };
+        const onPointerUp = (e) => {
+            if (!isDragging) return;
+            isDragging = false;
+
+            const clientX = e.changedTouches ? e.changedTouches[0].clientX : (e.clientX || startX);
+            const dx = clientX - startX;
+
+            // Dismiss if swiped off-screen horizontally (> 160px)
+            if (Math.abs(dx) > 160) {
+                setPlayingAnime(null);
+                miniPosRef.current = { x: 0, y: 0 };
+                return;
+            }
+
+            // Magnetic 4-Corner / Edge Snapping with safe margins
+            if (typeof window !== 'undefined') {
+                const screenW = window.innerWidth;
+                const screenH = window.innerHeight;
+                const miniW = screenW < 640 ? screenW - 24 : 384;
+                const miniH = screenW < 640 ? 192 : 224;
+
+                const maxLeftX = -(screenW - miniW - 24);
+                const currentX = miniPosRef.current.x;
+                const targetSnapX = currentX < maxLeftX / 2 ? maxLeftX : 0;
+
+                const minY = -(screenH - miniH - 120);
+                const currentY = miniPosRef.current.y;
+                const clampedY = Math.min(0, Math.max(minY, currentY));
+                let targetSnapY = clampedY;
+                if (currentY < minY * 0.7) {
+                    targetSnapY = minY;
+                } else if (currentY > minY * 0.3) {
+                    targetSnapY = 0;
+                }
+
+                miniEl.style.transition = 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)';
+                miniEl.style.transform = `translate3d(${targetSnapX}px, ${targetSnapY}px, 0)`;
+                miniPosRef.current = { x: targetSnapX, y: targetSnapY };
+
+                setTimeout(() => {
+                    miniDragOriginRef.current.hasMoved = false;
+                }, 100);
+            }
+        };
+
+        miniEl.addEventListener('touchstart', onPointerDown, { passive: false });
+        window.addEventListener('touchmove', onPointerMove, { passive: false });
+        window.addEventListener('touchend', onPointerUp, { passive: false });
+        window.addEventListener('touchcancel', onPointerUp, { passive: false });
+
+        miniEl.addEventListener('mousedown', onPointerDown);
+        window.addEventListener('mousemove', onPointerMove);
+        window.addEventListener('mouseup', onPointerUp);
+
+        return () => {
+            miniEl.removeEventListener('touchstart', onPointerDown);
+            window.removeEventListener('touchmove', onPointerMove);
+            window.removeEventListener('touchend', onPointerUp);
+            window.removeEventListener('touchcancel', onPointerUp);
+
+            miniEl.removeEventListener('mousedown', onPointerDown);
+            window.removeEventListener('mousemove', onPointerMove);
+            window.removeEventListener('mouseup', onPointerUp);
+        };
+    }, [isPlayerMinimized]);
 
     // Fullscreen Topbar Pull-to-Minimize Handlers
     const handleHeaderTouchStart = (e) => {
@@ -235,8 +309,133 @@ function App() {
         if (!e.changedTouches?.[0]) return;
         const diffY = e.changedTouches[0].clientY - headerTouchStartRef.current.y;
         const diffX = e.changedTouches[0].clientX - headerTouchStartRef.current.x;
-        if (diffY > 60 && diffY > Math.abs(diffX)) {
+        if (diffY > 50 && diffY > Math.abs(diffX)) {
             setIsPlayerMinimized(true);
+        }
+    };
+
+    // Browser History / Mobile Back Button Navigation Interceptor
+    // Uses in-page hash navigation (#watch, #detail) so mobile browsers never trigger document reloads
+    const playerHistoryPushedRef = useRef(false);
+    const detailHistoryPushedRef = useRef(false);
+
+    useEffect(() => {
+        if (playingAnime && !isPlayerMinimized) {
+            if (!playerHistoryPushedRef.current) {
+                playerHistoryPushedRef.current = true;
+                try {
+                    window.history.pushState({ mugenView: 'player-maximized' }, '', '#watch');
+                } catch (err) {
+                    console.warn('History push failed:', err);
+                }
+            }
+        } else {
+            playerHistoryPushedRef.current = false;
+        }
+    }, [playingAnime ? playingAnime.id || playingAnime.slug || true : null, isPlayerMinimized]);
+
+    useEffect(() => {
+        if (selectedAnime) {
+            if (!detailHistoryPushedRef.current) {
+                detailHistoryPushedRef.current = true;
+                try {
+                    window.history.pushState({ mugenView: 'anime-detail' }, '', '#detail');
+                } catch (err) {
+                    console.warn('History push failed:', err);
+                }
+            }
+        } else {
+            detailHistoryPushedRef.current = false;
+        }
+    }, [selectedAnime ? selectedAnime.id || selectedAnime.slug || true : null]);
+
+    useEffect(() => {
+        const handlePopState = () => {
+            // 1. If video is playing maximized, minimize it
+            if (playingAnime && !isPlayerMinimized) {
+                playerHistoryPushedRef.current = false;
+                setIsPlayerMinimized(true);
+                return;
+            }
+            // 2. If detail modal is open, close it
+            if (selectedAnime) {
+                detailHistoryPushedRef.current = false;
+                setSelectedAnime(null);
+                return;
+            }
+            // 3. If dev code modal is open, close it
+            if (showDevCodeModal) {
+                setShowDevCodeModal(false);
+                return;
+            }
+            // 4. If delete confirm modal is open, close it
+            if (showDeleteConfirmModal) {
+                setShowDeleteConfirmModal(false);
+                return;
+            }
+            // 5. If add source modal is open, close it
+            if (showAddSource) {
+                setShowAddSource(false);
+                return;
+            }
+            // 6. If direct play modal is open, close it
+            if (showDirectPlay) {
+                setShowDirectPlay(false);
+                return;
+            }
+        };
+
+        window.addEventListener('popstate', handlePopState);
+        return () => window.removeEventListener('popstate', handlePopState);
+    }, [playingAnime, isPlayerMinimized, selectedAnime, showDevCodeModal, showDeleteConfirmModal, showAddSource, showDirectPlay]);
+
+    // Data and Cache Handlers
+    const handleClearCacheOnly = async () => {
+        setIsClearingCache(true);
+        try {
+            if ('caches' in window) {
+                const keys = await window.caches.keys();
+                await Promise.all(keys.map(key => window.caches.delete(key)));
+            }
+            sessionStorage.clear();
+            showToast("Temporary cache cleared successfully!", "success");
+        } catch (err) {
+            console.error("Failed to clear cache:", err);
+            showToast("Cache cleared", "info");
+        } finally {
+            setTimeout(() => setIsClearingCache(false), 500);
+        }
+    };
+
+    const handleDeleteEverything = async () => {
+        try {
+            // Clear all localStorage keys
+            localStorage.clear();
+            sessionStorage.clear();
+            if ('caches' in window) {
+                const keys = await window.caches.keys();
+                await Promise.all(keys.map(key => window.caches.delete(key)));
+            }
+
+            // Reset state
+            setWatchHistory([]);
+            setFavorites([]);
+            setExtensions(INITIAL_EXTENSIONS);
+            setTheme('dark');
+            setDevMode(false);
+            setIsDevUnlocked(false);
+            setVideoYOffset(0);
+            setMiniVideoYOffset(-50);
+            setVideoScale(1);
+            setMiniVideoScale(1);
+            setContentFilter('ALL');
+            setShowDeleteConfirmModal(false);
+
+            showToast("All data, cache, and preferences have been wiped clean!", "success");
+        } catch (err) {
+            console.error("Failed to delete all data:", err);
+            showToast("Data reset completed", "info");
+            setShowDeleteConfirmModal(false);
         }
     };
 
@@ -817,7 +1016,7 @@ function App() {
                 ];
 
                 return (
-                    <div className="p-3 sm:p-8 space-y-6 sm:space-y-8 animate-fade-in max-w-full overflow-hidden">
+                    <div className="p-3 sm:p-8 flex flex-col gap-4 sm:gap-6 animate-fade-in max-w-full overflow-hidden">
                         <div className="flex flex-col gap-5">
                             {/* Header Row */}
                             <div className="flex items-center justify-between">
@@ -1187,22 +1386,23 @@ function App() {
                             {!isDevUnlocked ? (
                                 <div
                                     onClick={() => setShowDevCodeModal(true)}
-                                    className="bg-gray-900/70 p-5 rounded-xl border border-gray-800 flex items-center justify-between cursor-pointer hover:border-gray-700 transition-colors group"
+                                    className="dev-locked-card bg-gradient-to-r from-amber-950/20 via-gray-900 to-gray-900 p-5 rounded-xl border border-amber-500/20 flex items-center justify-between cursor-pointer hover:border-amber-500/40 transition-all group shadow-lg"
                                 >
                                     <div className="flex items-center gap-3">
-                                        <div className="p-2.5 rounded-xl bg-gray-800 text-gray-400 border border-gray-700 group-hover:text-amber-400 transition-colors">
+                                        <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20 group-hover:bg-amber-500/20 group-hover:text-amber-300 transition-colors">
                                             <Lock className="w-4 h-4" />
                                         </div>
                                         <div>
-                                            <h3 className="text-sm font-semibold text-gray-300 group-hover:text-white transition-colors">
+                                            <h3 className="text-sm font-semibold text-gray-200 group-hover:text-white transition-colors">
                                                 Developer Options
                                             </h3>
-                                            <p className="text-xs text-gray-500">Advanced stream diagnostics</p>
+                                            <p className="text-xs text-gray-400">Advanced stream diagnostics & viewport tools</p>
                                         </div>
                                     </div>
+                                    <ChevronRight className="w-4 h-4 text-gray-500 group-hover:text-amber-400 transition-colors" />
                                 </div>
                             ) : (
-                                <div className="settings-card bg-gray-900 p-6 rounded-xl border border-gray-800 space-y-6 animate-fade-in">
+                                <div className="settings-card dev-unlocked-card bg-gradient-to-br from-amber-950/30 via-gray-900 to-gray-900 p-6 rounded-xl border border-amber-500/30 space-y-6 animate-fade-in shadow-xl">
                                     <div className="flex items-center justify-between">
                                         <div>
                                             <h3 className="text-lg font-medium text-white flex items-center gap-2">
@@ -1404,6 +1604,50 @@ function App() {
                                 </div>
                             )}
 
+                            {/* Storage & Data Management */}
+                            <div className="settings-data-card bg-gray-900 p-6 rounded-xl border border-gray-800 space-y-4 animate-fade-in">
+                                <div>
+                                    <h3 className="text-lg font-medium text-white flex items-center gap-2">
+                                        <Trash2 className="w-5 h-5 text-red-500" />
+                                        Storage & Cache Management
+                                    </h3>
+                                    <p className="text-xs text-gray-400 mt-0.5">Manage cached data, watch history, and app storage</p>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                                    {/* Clear Cache */}
+                                    <div className="settings-subcard p-4 bg-black/40 border border-gray-800 rounded-xl space-y-2 flex flex-col justify-between">
+                                        <div>
+                                            <span className="text-sm font-semibold text-gray-200 block">Clear Temporary Cache</span>
+                                            <span className="text-xs text-gray-400 block mt-0.5">Removes cached images and temporary session data. Keeps your favorites and history intact.</span>
+                                        </div>
+                                        <button
+                                            onClick={handleClearCacheOnly}
+                                            disabled={isClearingCache}
+                                            className="settings-cache-btn mt-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded-lg text-xs font-semibold transition-all border border-gray-700 cursor-pointer flex items-center justify-center gap-1.5 active-press"
+                                        >
+                                            <RefreshCw className={`w-3.5 h-3.5 ${isClearingCache ? 'animate-spin' : ''}`} />
+                                            {isClearingCache ? 'Clearing Cache...' : 'Clear Temporary Cache'}
+                                        </button>
+                                    </div>
+
+                                    {/* Delete Everything */}
+                                    <div className="settings-subcard p-4 bg-red-950/20 border border-red-500/20 rounded-xl space-y-2 flex flex-col justify-between">
+                                        <div>
+                                            <span className="text-sm font-semibold text-red-400 block">Delete Everything & Reset</span>
+                                            <span className="text-xs text-gray-400 block mt-0.5">Permanently erases watch history, favorites, custom extension settings, and resets app to initial state.</span>
+                                        </div>
+                                        <button
+                                            onClick={() => setShowDeleteConfirmModal(true)}
+                                            className="settings-danger-btn mt-2 px-3 py-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-500/40 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 active-press"
+                                        >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                            Delete All Data & Reset
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
                             {/* About */}
                             <div className="bg-gray-900 p-6 rounded-xl border border-gray-800 space-y-2">
                                 <h3 className="text-lg font-medium text-white">About</h3>
@@ -1431,9 +1675,9 @@ function App() {
             case 'home':
             default:
                 return (
-                    <div className="p-3 sm:p-8 space-y-6 sm:space-y-8 animate-fade-in max-w-full overflow-hidden">
+                    <div className="p-3 sm:p-8 flex flex-col gap-4 sm:gap-6 animate-fade-in max-w-full overflow-hidden">
                         {/* Top Bar with Brand, Surprise Me, Direct Play, & Sun/Moon Theme Toggle */}
-                        <div className="flex items-center justify-between gap-3 pb-2">
+                        <div className="flex items-center justify-between gap-3 pb-1">
                             <div className="flex items-center gap-2 sm:gap-3">
                                 <h1 className="text-xl sm:text-2xl font-black tracking-wider text-white">
                                     MUGEN<span className="text-red-600">PLAY</span>
@@ -1541,7 +1785,7 @@ function App() {
                             <>
                                 {/* Hero Section */}
                                 <HeroCarousel
-                                    items={(trendingList || []).slice(0, 10)}
+                                    items={heroCarouselItems}
                                     onPlay={handlePlay}
                                     onInfo={setSelectedAnime}
                                 />
@@ -1705,7 +1949,7 @@ function App() {
             />
 
             <main
-                className="flex-1 min-w-0 min-h-screen relative overflow-x-hidden transition-[margin] duration-150 pb-24 lg:pb-8"
+                className="flex-1 min-w-0 min-h-screen relative transition-[margin] duration-150 pb-24 lg:pb-8"
                 style={{ marginLeft: isDesktop ? (isSidebarCollapsed ? 80 : (sidebarWidth || 256)) : 0 }}
             >
                 {renderContent()}
@@ -1714,49 +1958,16 @@ function App() {
                 {/* Unified Persistent Player Overlay */}
                 {playingAnime && (
                     <div
-                        onTouchStart={(e) => {
-                            if (isPlayerMinimized && e.touches?.[0]) {
-                                handleMiniPointerDown(e.touches[0].clientX, e.touches[0].clientY);
-                            }
-                        }}
-                        onTouchMove={(e) => {
-                            if (isPlayerMinimized && e.touches?.[0]) {
-                                handleMiniPointerMove(e.touches[0].clientX, e.touches[0].clientY);
-                            }
-                        }}
-                        onTouchEnd={(e) => {
-                            if (isPlayerMinimized && e.changedTouches?.[0]) {
-                                handleMiniPointerUp(e.changedTouches[0].clientX);
-                            }
-                        }}
-                        onMouseDown={(e) => {
-                            if (isPlayerMinimized) {
-                                handleMiniPointerDown(e.clientX, e.clientY);
-                                const onMouseMove = (moveEvent) => {
-                                    handleMiniPointerMove(moveEvent.clientX, moveEvent.clientY);
-                                };
-                                const onMouseUp = (upEvent) => {
-                                    handleMiniPointerUp(upEvent.clientX);
-                                    window.removeEventListener('mousemove', onMouseMove);
-                                    window.removeEventListener('mouseup', onMouseUp);
-                                };
-                                window.addEventListener('mousemove', onMouseMove);
-                                window.addEventListener('mouseup', onMouseUp);
-                            }
-                        }}
+                        ref={miniPlayerRef}
                         onClick={() => {
                             if (isPlayerMinimized && !miniDragOriginRef.current.hasMoved) {
                                 setIsPlayerMinimized(false);
                             }
                         }}
-                        style={isPlayerMinimized ? {
-                            transform: `translate3d(${miniPosition.x}px, ${miniPosition.y}px, 0)`,
-                            transition: isDraggingMini ? 'none' : 'transform 0.4s cubic-bezier(0.32, 0.72, 0, 1)'
-                        } : undefined}
-                        className={`fixed z-50 bg-[#0a0a0a] playback-modal text-white flex flex-col font-sans transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] shadow-2xl overflow-hidden ${
+                        className={`fixed z-50 bg-[#0a0a0a] playback-modal text-white flex flex-col font-sans shadow-2xl overflow-hidden ${
                             isPlayerMinimized
-                                ? 'bottom-20 sm:bottom-6 right-3 sm:right-6 w-[calc(100vw-24px)] sm:w-96 h-48 sm:h-56 rounded-2xl border border-white/15 ring-1 ring-black/50 shadow-2xl cursor-grab active:cursor-grabbing select-none'
-                                : 'inset-0 rounded-none'
+                                ? 'bottom-20 sm:bottom-6 left-3 right-3 sm:left-auto sm:right-6 sm:w-96 h-48 sm:h-56 rounded-2xl border border-white/15 ring-1 ring-black/50 shadow-2xl cursor-grab active:cursor-grabbing select-none touch-none transform-gpu will-change-transform'
+                                : 'inset-0 rounded-none transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]'
                         }`}
                     >
                         {/* Draggable Indicator Handle for Miniplayer */}
@@ -1827,8 +2038,8 @@ function App() {
 
                         <div className="flex-1 flex overflow-hidden">
                             {/* Player Column */}
-                            <div className="flex-1 flex flex-col overflow-y-auto custom-scrollbar relative transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]">
-                                <div className={`w-full bg-black relative transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${isPlayerMinimized ? 'h-full rounded-2xl overflow-hidden shadow-2xl z-[100]' : 'w-full max-w-5xl mx-auto sm:ring-1 sm:ring-white/10 rounded-none sm:rounded-3xl p-0 sm:p-5 mt-0 sm:mt-6 mb-2 sm:mb-4'}`}>
+                            <div className="flex-1 flex flex-col overflow-y-auto no-scrollbar sm:custom-scrollbar relative transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]">
+                                <div className={`w-full bg-black relative transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${isPlayerMinimized ? 'h-full rounded-2xl overflow-hidden shadow-2xl z-[100]' : 'w-full max-w-5xl mx-auto sm:ring-1 sm:ring-white/10 rounded-2xl sm:rounded-3xl p-3 sm:p-5 mt-2 sm:mt-6 mb-2 sm:mb-4'}`}>
                                     <VideoPlayer
                                         src={playingAnime.url || playingAnime.streamUrl || playingAnime.source}
                                         poster={playingAnime.bannerUrl || playingAnime.coverUrl}
@@ -2220,6 +2431,58 @@ function App() {
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Delete Everything Confirmation Modal */}
+            {showDeleteConfirmModal && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[150] flex items-center justify-center p-4 animate-fade-in">
+                    <div className="bg-gray-900 border border-red-500/40 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-scale-in">
+                        <div className="p-6 bg-gradient-to-r from-red-950/80 via-gray-900 to-gray-900 border-b border-red-500/20 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2.5 bg-red-500/20 text-red-400 rounded-xl border border-red-500/30">
+                                    <AlertTriangle size={20} />
+                                </div>
+                                <div>
+                                    <h3 className="text-base font-bold text-white">Reset All App Data?</h3>
+                                    <p className="text-xs text-red-300/80">This action cannot be undone</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setShowDeleteConfirmModal(false)}
+                                className="p-1.5 hover:bg-white/10 text-gray-400 hover:text-white rounded-lg transition-colors cursor-pointer"
+                            >
+                                <X size={18} />
+                            </button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <p className="text-sm text-gray-300 leading-relaxed">
+                                This will permanently erase:
+                            </p>
+                            <ul className="text-xs text-gray-400 space-y-1.5 list-disc list-inside bg-black/40 p-3.5 rounded-xl border border-white/5 font-medium">
+                                <li>All Watch History & Episode progress</li>
+                                <li>Saved Favorites & Bookmarks</li>
+                                <li>Custom Extensions & Source configurations</li>
+                                <li>Player Calibration offsets & Zoom levels</li>
+                                <li>Temporary App & Image Cache</li>
+                            </ul>
+                            <div className="flex items-center justify-end gap-3 pt-2">
+                                <button
+                                    onClick={() => setShowDeleteConfirmModal(false)}
+                                    className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl text-xs font-semibold transition-colors cursor-pointer active-press"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleDeleteEverything}
+                                    className="px-5 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-red-600/30 cursor-pointer active-press flex items-center gap-1.5"
+                                >
+                                    <Trash2 size={14} />
+                                    Yes, Delete Everything
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}
