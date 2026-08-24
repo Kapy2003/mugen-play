@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Compass, Filter, Search, X, RotateCcw } from 'lucide-react';
 import AnimeCard from '../anime/AnimeCard';
 import { formatAnimeTitle } from '../../lib/formatters';
@@ -14,7 +15,7 @@ const currentMaxYear = new Date().getFullYear() + 1;
 const oldestAnimeYear = 1940;
 const YEARS_LIST = Array.from({ length: currentMaxYear - oldestAnimeYear + 1 }, (_, i) => currentMaxYear - i);
 
-const BrowseView = ({
+const BrowseView = memo(({
     animeList = [],
     isLoading = false,
     searchQuery = '',
@@ -333,6 +334,8 @@ const BrowseView = ({
             )}
         </div>
     );
-};
+});
+
+BrowseView.displayName = 'BrowseView';
 
 export default BrowseView;

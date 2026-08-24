@@ -1,9 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, memo } from 'react';
 import { Power, Trash2, Cog, ShoppingBag, RotateCcw, AlertCircle, Activity, Loader2, Plus, Sparkles, Film } from 'lucide-react';
 import ExtensionStoreModal from './ExtensionStoreModal';
 import { ExtensionHealthChecker } from '../../lib/ExtensionHealthChecker';
 
-const ExtensionsView = ({
+const ExtensionsView = memo(({
     extensions,
     onToggle,
     onAddSource,
@@ -267,6 +267,8 @@ const ExtensionsView = ({
             </div>
         </div>
     );
-};
+});
+
+ExtensionsView.displayName = 'ExtensionsView';
 
 export default ExtensionsView;

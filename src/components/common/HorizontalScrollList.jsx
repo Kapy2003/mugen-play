@@ -73,8 +73,8 @@ const HorizontalScrollList = memo(({ title, icon: Icon, items, onItemClick, rend
     };
 
     return (
-        <div className="mb-6 sm:mb-8 animate-fade-in group/section">
-            <div className="flex items-center justify-between mb-3 sm:mb-4">
+        <div className="animate-fade-in group/section">
+            <div className="flex items-center justify-between mb-2.5 sm:mb-3">
                 <h2 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
                     {Icon && <Icon className="w-4 h-4 sm:w-5 sm:h-5 text-red-500" />}
                     {title}

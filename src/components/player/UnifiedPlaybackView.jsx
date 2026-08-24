@@ -50,6 +50,7 @@ const UnifiedPlaybackView = ({
     const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 });
     const [isDragging, setIsDragging] = useState(false);
     const isDraggingRef = useRef(false);
+    const dragRafRef = useRef(null);
     const dragStartRef = useRef({ x: 0, y: 0 });
     const dragOriginRef = useRef({ x: 0, y: 0, hasMoved: false });
     const miniPlayerContainerRef = useRef(null);
@@ -116,34 +117,47 @@ const UnifiedPlaybackView = ({
 
     const handlePointerMove = (e) => {
         if (!isDraggingRef.current || !isMinimized) return;
-        const deltaX = e.clientX - dragStartRef.current.x;
-        const deltaY = e.clientY - dragStartRef.current.y;
+        const clientX = e.clientX;
+        const clientY = e.clientY;
 
-        if (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3) {
-            dragOriginRef.current.hasMoved = true;
+        if (dragRafRef.current) {
+            cancelAnimationFrame(dragRafRef.current);
         }
 
-        const newX = dragOriginRef.current.x + deltaX;
-        const newY = dragOriginRef.current.y + deltaY;
+        dragRafRef.current = requestAnimationFrame(() => {
+            const deltaX = clientX - dragStartRef.current.x;
+            const deltaY = clientY - dragStartRef.current.y;
 
-        // Viewport Boundary Clamping
-        const screenW = typeof window !== 'undefined' ? window.innerWidth : 1024;
-        const screenH = typeof window !== 'undefined' ? window.innerHeight : 768;
-        const miniW = miniPlayerContainerRef.current?.offsetWidth || (screenW < 640 ? screenW - 24 : 384);
-        const miniH = miniPlayerContainerRef.current?.offsetHeight || (screenW < 640 ? 192 : 224);
+            if (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3) {
+                dragOriginRef.current.hasMoved = true;
+            }
 
-        const minX = -(screenW - miniW - (screenW < 640 ? 24 : 48));
-        const maxX = 24;
-        const minY = -(screenH - miniH - 40);
-        const maxY = 24;
+            const newX = dragOriginRef.current.x + deltaX;
+            const newY = dragOriginRef.current.y + deltaY;
 
-        const clampedX = Math.max(minX, Math.min(maxX, newX));
-        const clampedY = Math.max(minY, Math.min(maxY, newY));
+            // Viewport Boundary Clamping
+            const screenW = typeof window !== 'undefined' ? window.innerWidth : 1024;
+            const screenH = typeof window !== 'undefined' ? window.innerHeight : 768;
+            const miniW = miniPlayerContainerRef.current?.offsetWidth || (screenW < 640 ? screenW - 24 : 384);
+            const miniH = miniPlayerContainerRef.current?.offsetHeight || (screenW < 640 ? 192 : 224);
 
-        setDragPosition({ x: clampedX, y: clampedY });
+            const minX = -(screenW - miniW - (screenW < 640 ? 24 : 48));
+            const maxX = 24;
+            const minY = -(screenH - miniH - 40);
+            const maxY = 24;
+
+            const clampedX = Math.max(minX, Math.min(maxX, newX));
+            const clampedY = Math.max(minY, Math.min(maxY, newY));
+
+            setDragPosition({ x: clampedX, y: clampedY });
+        });
     };
 
     const handlePointerUp = useCallback((e) => {
+        if (dragRafRef.current) {
+            cancelAnimationFrame(dragRafRef.current);
+            dragRafRef.current = null;
+        }
         if (!isDraggingRef.current || !isMinimized) return;
         isDraggingRef.current = false;
         setIsDragging(false);

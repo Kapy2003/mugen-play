@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, memo } from 'react';
 import { Heart, Trash2, CheckSquare, Square, X, Check } from 'lucide-react';
 import AnimeCard from '../anime/AnimeCard';
 import { formatAnimeTitle } from '../../lib/formatters';
 import Mascot from '../common/Mascot';
 
-const FavoritesView = ({
+const FavoritesView = memo(({
     favorites = [],
     onSelectAnime,
     onRemoveFavorite,
@@ -171,7 +171,7 @@ const FavoritesView = ({
             )}
         </div>
     );
-};
+});
 
 FavoritesView.displayName = 'FavoritesView';
 

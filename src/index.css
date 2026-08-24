@@ -29,19 +29,17 @@
   .transform-gpu {
     transform: translate3d(0, 0, 0);
     backface-visibility: hidden;
-    perspective: 1000px;
-    will-change: transform;
   }
 
   .fluid-card-lift {
-    transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.28s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s ease;
-    will-change: transform;
+    transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.22s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.15s ease;
     content-visibility: auto;
     contain-intrinsic-size: 280px;
   }
 
   .fluid-card-lift:hover {
     transform: translate3d(0, -6px, 0) scale(1.02);
+    will-change: transform;
   }
 
   .fluid-card-lift:active {

@@ -1,10 +1,11 @@
+import { memo } from 'react';
 import { Shuffle, Play, Sun, Moon, Film, ChevronRight, X, Flame, Star, Trophy, Heart, Compass, BookOpen } from 'lucide-react';
 import HeroCarousel from '../home/HeroCarousel';
 import HorizontalScrollList from '../common/HorizontalScrollList';
 import AnimeCard from '../anime/AnimeCard';
 import { formatAnimeTitle } from '../../lib/formatters';
 
-const HomeView = ({
+const HomeView = memo(({
     trendingList = [],
     popularList = [],
     topRatedList = [],
@@ -138,7 +139,7 @@ const HomeView = ({
 
             {/* Shelves Container */}
             {!isShelvesLoading && (
-                <div className="flex flex-col gap-6 sm:gap-8 pb-12">
+                <div className="flex flex-col gap-4 sm:gap-6 pb-8">
                     {/* Continue Watching Shelf */}
                     {watchHistory.length > 0 && (
                         <HorizontalScrollList
@@ -147,7 +148,7 @@ const HomeView = ({
                             onItemClick={(anime) => onPlay(anime)}
                             renderItem={(anime) => (
                                 <div className="min-w-[160px] w-[160px] sm:min-w-[210px] sm:w-[210px] flex-shrink-0 cursor-pointer group relative fluid-card-lift">
-                                    <div className="aspect-video rounded-xl overflow-hidden mb-2 relative bg-gray-900 border border-gray-800 shadow-md">
+                                    <div className="aspect-video rounded-xl overflow-hidden mb-1.5 relative bg-gray-900 border border-gray-800 shadow-md">
                                         <img
                                             src={anime.bannerUrl || anime.coverUrl}
                                             alt={formatAnimeTitle(anime.title)}
@@ -286,6 +287,8 @@ const HomeView = ({
             )}
         </div>
     );
-};
+});
+
+HomeView.displayName = 'HomeView';
 
 export default HomeView;

@@ -1,6 +1,7 @@
+import { memo } from 'react';
 import { Moon, Sun, Lock, ChevronRight, Code, Sliders, Link, Copy, Trash2, RefreshCw, BookOpen } from 'lucide-react';
 
-const SettingsView = ({
+const SettingsView = memo(({
     contentFilter = 'ALL',
     cycleContentFilter,
     hasNsfwExtension = false,
@@ -398,6 +399,8 @@ const SettingsView = ({
             </div>
         </div>
     );
-};
+});
+
+SettingsView.displayName = 'SettingsView';
 
 export default SettingsView;

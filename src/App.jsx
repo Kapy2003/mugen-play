@@ -824,12 +824,43 @@ function App() {
         }
     };
 
-    const handleSearch = (e) => {
+    const handleClearSearch = useCallback(() => {
+        setSearchQuery('');
+        setPage(1);
+    }, []);
+
+    const handleDismissExtensionNotice = useCallback(() => {
+        setHasDismissedExtensionNotice(true);
+        localStorage.setItem('mugen_has_seen_extension_prompt', 'true');
+    }, []);
+
+    const handleRandomPlay = useCallback(() => {
+        const pool = [...trendingList, ...popularList, ...topRatedList];
+        if (pool.length > 0) {
+            const random = pool[Math.floor(Math.random() * pool.length)];
+            handlePlay(random);
+        } else {
+            showToast("Loading anime catalog...", "info");
+        }
+    }, [trendingList, popularList, topRatedList, handlePlay]);
+
+    const handleDirectPlayOpen = useCallback(() => setShowDirectPlay(true), []);
+    const handleUserGuideOpen = useCallback(() => setShowUserGuide(true), []);
+    const handleAddSourceOpen = useCallback(() => {
+        setEditingExtension(null);
+        setShowAddSource(true);
+    }, []);
+    const handleEditExtensionOpen = useCallback((ext) => {
+        setEditingExtension(ext);
+        setShowAddSource(true);
+    }, []);
+
+    const handleSearch = useCallback((e) => {
         setSearchQuery(e.target.value);
         setPage(1);
-    };
+    }, []);
 
-    const handleFilterChange = (key, value) => {
+    const handleFilterChange = useCallback((key, value) => {
         setFilters(prev => {
             const newFilters = { ...prev };
             if (value === '' || value === 'Any') {
@@ -841,14 +872,14 @@ function App() {
         });
         setPage(1);
         setActiveTab('browse');
-    };
+    }, []);
 
-    const handleResetFilters = () => {
+    const handleResetFilters = useCallback(() => {
         setFilters({});
         setSearchQuery('');
         setPage(1);
         showToast("Filters and search cleared", "info");
-    };
+    }, []);
 
     // Render Active Tab Content
     const renderContent = () => {
@@ -858,15 +889,9 @@ function App() {
                     <ExtensionsView
                         extensions={extensions}
                         onToggle={handleToggleExtension}
-                        onAddSource={() => {
-                            setEditingExtension(null);
-                            setShowAddSource(true);
-                        }}
+                        onAddSource={handleAddSourceOpen}
                         onInstallExtension={handleAddSource}
-                        onEditExtension={(ext) => {
-                            setEditingExtension(ext);
-                            setShowAddSource(true);
-                        }}
+                        onEditExtension={handleEditExtensionOpen}
                         onRemove={handleRemoveSource}
                         onReset={handleResetExtensions}
                         onUpdateExtension={handleUpdateSource}
@@ -880,10 +905,7 @@ function App() {
                         isLoading={isLoading}
                         searchQuery={searchQuery}
                         onSearch={handleSearch}
-                        onClearSearch={() => {
-                            setSearchQuery('');
-                            setPage(1);
-                        }}
+                        onClearSearch={handleClearSearch}
                         filters={filters}
                         onFilterChange={handleFilterChange}
                         onResetFilters={handleResetFilters}
@@ -938,7 +960,7 @@ function App() {
                         handleClearCacheOnly={handleClearCacheOnly}
                         setShowDeleteConfirmModal={setShowDeleteConfirmModal}
                         handleVersionClick={handleVersionClick}
-                        onOpenUserGuide={() => setShowUserGuide(true)}
+                        onOpenUserGuide={handleUserGuideOpen}
                     />
                 );
 
@@ -954,27 +976,16 @@ function App() {
                         watchHistory={watchHistory}
                         favorites={favorites}
                         hasDismissedExtensionNotice={hasDismissedExtensionNotice}
-                        onDismissExtensionNotice={() => {
-                            setHasDismissedExtensionNotice(true);
-                            localStorage.setItem('mugen_has_seen_extension_prompt', 'true');
-                        }}
+                        onDismissExtensionNotice={handleDismissExtensionNotice}
                         theme={theme}
                         toggleTheme={toggleTheme}
                         onPlay={handlePlay}
                         onInfo={setSelectedAnime}
-                        onRandomPlay={() => {
-                            const pool = [...trendingList, ...popularList, ...topRatedList];
-                            if (pool.length > 0) {
-                                const random = pool[Math.floor(Math.random() * pool.length)];
-                                handlePlay(random);
-                            } else {
-                                showToast("Loading anime catalog...", "info");
-                            }
-                        }}
-                        onDirectPlay={() => setShowDirectPlay(true)}
+                        onRandomPlay={handleRandomPlay}
+                        onDirectPlay={handleDirectPlayOpen}
                         onNavigateTab={handleTabChange}
                         onRemoveFromHistory={removeFromHistory}
-                        onOpenUserGuide={() => setShowUserGuide(true)}
+                        onOpenUserGuide={handleUserGuideOpen}
                     />
                 );
         }
