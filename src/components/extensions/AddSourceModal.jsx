@@ -72,14 +72,23 @@ const AddSourceModal = ({ isOpen, onClose, onAdd, onEdit, initialData = null }) 
     const handleSubmit = (e) => {
         e.preventDefault();
 
+        const cleanBaseUrl = ExtensionLoader.sanitizeBaseUrl(formData.url);
+        const domainName = ExtensionLoader.extractDomainName(cleanBaseUrl);
+
         const basePayload = detectedManifest || {
             id: Date.now().toString(),
-            name: formData.name || ExtensionLoader.extractDomainName(formData.url),
-            url: formData.url,
-            baseUrl: formData.url,
+            name: formData.name || domainName,
+            url: cleanBaseUrl,
+            baseUrl: cleanBaseUrl,
             username: formData.username,
             password: formData.password,
-            type: 'custom',
+            type: 'stream',
+            endpoints: {
+                search: `${cleanBaseUrl}/search?keyword={query}`,
+                trending: `${cleanBaseUrl}`,
+                episodes: `${cleanBaseUrl}/watch/{slug}?ep={episode}`,
+                stream: `${cleanBaseUrl}/watch/{slug}?ep={episode}`
+            },
             enabled: true,
             status: 'installed',
             version: '1.0.0'
@@ -87,11 +96,12 @@ const AddSourceModal = ({ isOpen, onClose, onAdd, onEdit, initialData = null }) 
 
         const finalExtensionData = {
             ...basePayload,
-            name: formData.name || basePayload.name,
-            url: formData.url,
-            baseUrl: formData.url,
+            name: formData.name || basePayload.name || domainName,
+            url: cleanBaseUrl,
+            baseUrl: cleanBaseUrl,
             username: formData.username,
-            password: formData.password
+            password: formData.password,
+            type: 'stream'
         };
 
         // If user opted to keep permanently in Extension Store

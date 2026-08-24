@@ -1,6 +1,15 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { RefreshCw, Settings, Check, AlertTriangle, Link, Edit3, Copy, CheckCheck, X, Sliders, RotateCcw, ZoomIn, ZoomOut, ChevronUp, ChevronDown, Crop, ShoppingBag } from 'lucide-react';
 import Hls from 'hls.js';
+import { IframeStreamExtractor } from '../../lib/IframeStreamExtractor';
+import Mascot from '../common/Mascot';
+
+const getPlayerType = (url) => {
+    if (!url) return 'iframe';
+    if (url.match(/\.m3u8(\?.*)?$/i)) return 'hls';
+    if (url.match(/\.(mp4|webm|ogg)(\?.*)?$/i)) return 'native';
+    return 'iframe';
+};
 
 const VideoPlayer = ({
     src,
@@ -18,11 +27,15 @@ const VideoPlayer = ({
     onOpenExtensionStore,
     onRetry
 }) => {
-    const [activeSrc, setActiveSrc] = useState(src);
-    const [loadError, setLoadError] = useState(false);
+    const cachedExtraction = IframeStreamExtractor.getCached(src);
+    const initialActiveSrc = cachedExtraction?.streamUrl || src;
+    const initialPlayerType = cachedExtraction?.type || getPlayerType(initialActiveSrc);
+
+    const [activeSrc, setActiveSrc] = useState(initialActiveSrc);
+    const [loadError, setLoadError] = useState(!src || src === 'null' || src === '' || (typeof src === 'string' && src.includes('undefined')));
     const [isRetrying, setIsRetrying] = useState(false);
     const [key, setKey] = useState(0);
-    const [playerType, setPlayerType] = useState('iframe');
+    const [playerType, setPlayerType] = useState(initialPlayerType);
 
     // Editable Link State
     const [isEditingLink, setIsEditingLink] = useState(false);
@@ -39,33 +52,74 @@ const VideoPlayer = ({
     const [qualities, setQualities] = useState([]);
     const [currentQuality, setCurrentQuality] = useState(-1);
     const [showQualityMenu, setShowQualityMenu] = useState(false);
+    const [showControls, setShowControls] = useState(true);
 
     const videoRef = useRef(null);
     const hlsRef = useRef(null);
+    const prevSrcPropRef = useRef(src);
+    const extractedSrcRef = useRef(cachedExtraction?.streamUrl || null);
+    const controlsTimerRef = useRef(null);
+    const onEndedRef = useRef(onEnded);
+    const onProgressRef = useRef(onProgress);
 
-    // Sync activeSrc when incoming src changes
     useEffect(() => {
-        setActiveSrc(src);
-        setCustomUrlInput(src || '');
-        setQualities([]);
-        setCurrentQuality(-1);
+        onEndedRef.current = onEnded;
+    }, [onEnded]);
 
-        const isInvalid = !src || src === 'null' || src === '' || src.includes('undefined');
-        if (isInvalid) {
-            setLoadError(true);
-        } else {
-            setLoadError(false);
-            setKey(k => k + 1);
-        }
+    useEffect(() => {
+        onProgressRef.current = onProgress;
+    }, [onProgress]);
 
-        if (src && src.endsWith('.m3u8')) {
-            setPlayerType('hls');
-        } else if (src && src.match(/\.(mp4|webm|ogg)(\?.*)?$/i)) {
-            setPlayerType('native');
-        } else {
-            setPlayerType('iframe');
+    // Handle incoming source changes (e.g. episode switch, anime switch, source switch)
+    useEffect(() => {
+        if (src && src !== prevSrcPropRef.current) {
+            prevSrcPropRef.current = src;
+
+            if (src !== extractedSrcRef.current && src !== activeSrc) {
+                extractedSrcRef.current = null;
+
+                const cached = IframeStreamExtractor.getCached(src);
+                if (cached?.streamUrl) {
+                    extractedSrcRef.current = cached.streamUrl;
+                    setActiveSrc(cached.streamUrl);
+                    setPlayerType(cached.type);
+                    if (cached.type === 'iframe') {
+                        setLocalYOffset(0);
+                        setLocalScale(1);
+                    }
+                } else {
+                    setActiveSrc(src);
+                    setPlayerType(getPlayerType(src));
+                }
+
+                setCustomUrlInput(src || '');
+                setLoadError(!src || src === 'null' || src === '' || (typeof src === 'string' && src.includes('undefined')));
+                setQualities([]);
+                setCurrentQuality(-1);
+                setKey(k => k + 1);
+            }
         }
-    }, [src]);
+    }, [src, activeSrc]);
+
+    // Auto-hide controls and quality button after 3 seconds of inactivity in maximized view
+    const handleUserActivity = useCallback(() => {
+        setShowControls(true);
+        if (controlsTimerRef.current) {
+            clearTimeout(controlsTimerRef.current);
+        }
+        controlsTimerRef.current = setTimeout(() => {
+            setShowControls(false);
+        }, 3000);
+    }, []);
+
+    useEffect(() => {
+        handleUserActivity();
+        return () => {
+            if (controlsTimerRef.current) {
+                clearTimeout(controlsTimerRef.current);
+            }
+        };
+    }, [handleUserActivity]);
 
     const handleRetry = async () => {
         if (isRetrying) return;
@@ -83,57 +137,60 @@ const VideoPlayer = ({
         }
     };
 
-    // Automated 404 Detection — triggers mascot if "Oops! 404" / "404 Not Found" detected
+    // Automated Stream Iframe Extraction
     useEffect(() => {
-        if (!activeSrc || activeSrc === 'null' || activeSrc === '' || activeSrc.includes('undefined')) {
+        if (!activeSrc || activeSrc === 'null' || activeSrc === '' || (typeof activeSrc === 'string' && activeSrc.includes('undefined'))) {
             setLoadError(true);
             return;
         }
 
-        if (!activeSrc.startsWith('http')) return;
+        // Direct video files or already extracted standalone embed streams don't need extraction
+        if (
+            activeSrc.match(/\.m3u8(\?.*)?$/i) ||
+            activeSrc.match(/\.(mp4|webm|ogg)(\?.*)?$/i) ||
+            activeSrc.includes('bibiemb') ||
+            activeSrc.includes('vivibebe') ||
+            activeSrc.includes('otakuhg') ||
+            activeSrc.includes('megacloud') ||
+            activeSrc.includes('rapid-cloud') ||
+            extractedSrcRef.current === activeSrc
+        ) {
+            return;
+        }
 
         let isCancelled = false;
 
-        const check404Content = async () => {
-            const PROXIES = [
-                { name: 'corsproxy', fn: (url) => `https://corsproxy.io/?url=${encodeURIComponent(url)}` },
-                { name: 'allorigins', fn: (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}` },
-                { name: 'codetabs', fn: (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}` }
-            ];
+        const extractStream = async () => {
+            try {
+                const extracted = await IframeStreamExtractor.fetchAndExtract(activeSrc);
+                if (isCancelled) return;
 
-            for (const proxy of PROXIES) {
-                if (isCancelled) break;
-                try {
-                    const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 5000);
-                    const res = await fetch(proxy.fn(activeSrc), { signal: controller.signal });
-                    clearTimeout(timeoutId);
-
-                    if (!res) continue;
-
-                    console.log(`[MugenPlay] 404 check via ${proxy.name}: status=${res.status}`);
-
-                    // HTTP 404 status → trigger mascot immediately
-                    if (res.status === 404) {
-                        if (!isCancelled) setLoadError(true);
-                        return;
-                    }
-
-                    const text = (await res.text()).toLowerCase();
-                    if (text.includes('oops! 404') || text.includes('404 not found')) {
-                        console.log(`[MugenPlay] 404 text detected via ${proxy.name}`);
-                        if (!isCancelled) setLoadError(true);
-                    }
-                    return; // got a response, done
-                } catch (err) {
-                    console.log(`[MugenPlay] ${proxy.name} failed:`, err.message);
+                if (extracted?.is404) {
+                    console.warn('[VideoPlayer] 404 detected from stream extraction, triggering mascot screen');
+                    setLoadError(true);
+                    return;
                 }
+
+                if (extracted && extracted.streamUrl && extracted.streamUrl !== activeSrc) {
+                    console.log(`[VideoPlayer] Successfully extracted clean ${extracted.type} player:`, extracted.streamUrl);
+                    extractedSrcRef.current = extracted.streamUrl;
+                    setActiveSrc(extracted.streamUrl);
+                    setPlayerType(extracted.type);
+                    setLoadError(false);
+                    if (extracted.type === 'iframe') {
+                        setLocalYOffset(0);
+                        setLocalScale(1);
+                    }
+                    if (onUpdateStreamUrl) {
+                        onUpdateStreamUrl(extracted.streamUrl);
+                    }
+                }
+            } catch (err) {
+                console.warn('[VideoPlayer] Stream extraction error:', err);
             }
-            // All proxies failed — couldn't verify, iframe will show as-is
-            console.log('[MugenPlay] All proxies failed, cannot verify stream');
         };
 
-        check404Content();
+        extractStream();
 
         return () => { isCancelled = true; };
     }, [activeSrc, key]);
@@ -145,14 +202,22 @@ const VideoPlayer = ({
         if (xOffset !== undefined) setLocalXOffset(xOffset);
     }, [yOffset, scale, xOffset]);
 
-    // Handle HLS Native Playback
+    // Handle HLS Native Playback with Smooth Quality Transitions
     useEffect(() => {
         if (playerType !== 'hls' || !videoRef.current || !activeSrc) return;
 
         if (Hls.isSupported()) {
             if (hlsRef.current) hlsRef.current.destroy();
 
-            const hls = new Hls();
+            const hls = new Hls({
+                capLevelToPlayerSize: false,
+                maxBufferLength: 60,
+                maxMaxBufferLength: 600,
+                backBufferLength: 90,
+                smoothQualityChange: true,
+                autoStartLoad: true,
+                enableWorker: true
+            });
             hlsRef.current = hls;
 
             hls.loadSource(activeSrc);
@@ -168,11 +233,11 @@ const VideoPlayer = ({
 
                 setQualities(levels);
 
-                if (initialTime > 0) {
+                if (initialTime > 0 && videoRef.current) {
                     videoRef.current.currentTime = initialTime;
                 }
 
-                videoRef.current.play().catch(() => { });
+                videoRef.current?.play().catch(() => { });
             });
 
             hls.on(Hls.Events.ERROR, (event, data) => {
@@ -182,23 +247,27 @@ const VideoPlayer = ({
                 }
             });
 
-            videoRef.current.onended = onEnded;
+            videoRef.current.onended = () => {
+                if (onEndedRef.current) onEndedRef.current();
+            };
 
         } else if (videoRef.current.canPlayType('application/vnd.apple.mpegurl')) {
             videoRef.current.src = activeSrc;
             videoRef.current.addEventListener('loadedmetadata', () => {
-                if (initialTime > 0) {
+                if (initialTime > 0 && videoRef.current) {
                     videoRef.current.currentTime = initialTime;
                 }
-                videoRef.current.play();
-            });
-            videoRef.current.onended = onEnded;
+                videoRef.current?.play().catch(() => { });
+            }, { once: true });
+            videoRef.current.onended = () => {
+                if (onEndedRef.current) onEndedRef.current();
+            };
         }
 
         return () => {
             if (hlsRef.current) hlsRef.current.destroy();
         };
-    }, [activeSrc, playerType, key, initialTime, onEnded]);
+    }, [activeSrc, playerType, key]);
 
     const handleApplyCustomUrl = (e) => {
         if (e) e.preventDefault();
@@ -223,11 +292,13 @@ const VideoPlayer = ({
             trimmed = `https://anikoto.cz/watch/${slug}?ep=1`;
         }
 
+        prevSrcPropRef.current = trimmed;
+        extractedSrcRef.current = null;
         setActiveSrc(trimmed);
         setLoadError(false);
         setKey(k => k + 1);
 
-        if (trimmed.endsWith('.m3u8')) {
+        if (trimmed.endsWith('.m3u8') || trimmed.includes('.m3u8')) {
             setPlayerType('hls');
         } else if (trimmed.match(/\.(mp4|webm|ogg)(\?.*)?$/i)) {
             setPlayerType('native');
@@ -249,11 +320,17 @@ const VideoPlayer = ({
         }).catch(() => { });
     };
 
-
     const changeQuality = (qualityId) => {
         setCurrentQuality(qualityId);
         if (hlsRef.current) {
-            hlsRef.current.currentLevel = qualityId;
+            if (qualityId === -1) {
+                hlsRef.current.currentLevel = -1;
+                hlsRef.current.nextLevel = -1;
+            } else {
+                // Smooth non-destructive switch on next chunk
+                hlsRef.current.nextLevel = qualityId;
+                hlsRef.current.loadLevel = qualityId;
+            }
         }
         setShowQualityMenu(false);
     };
@@ -329,93 +406,9 @@ const VideoPlayer = ({
             return (
                 <div className="mascot-screen-container w-full h-full flex flex-col items-center justify-center bg-gradient-to-b from-[#121216] to-[#0a0a0d] text-gray-400 p-2 sm:p-6 text-center space-y-1.5 sm:space-y-3 animate-fade-in select-none overflow-y-auto no-scrollbar">
                     {/* Responsive Anime Dizzy Mascot Animation */}
-                    <div className="relative w-20 h-16 sm:w-36 sm:h-28 shrink-0 flex items-center justify-center">
+                    <div className="relative shrink-0 flex items-center justify-center">
                         <div className="absolute inset-0 bg-red-600/20 blur-xl rounded-full animate-pulse" />
-                        
-                        {/* Orbiting Cartoon Dizzy Stars / Question Marks */}
-                        <div className="absolute -top-2 w-full flex justify-center pointer-events-none z-20">
-                            <div className="animate-anime-orbit flex items-center justify-center text-amber-300 font-black text-[10px] sm:text-xs">
-                                <span>★</span>
-                                <span className="text-red-400 font-bold ml-2 sm:ml-3">?</span>
-                                <span className="text-yellow-400 text-[8px] sm:text-[10px] ml-2 sm:ml-3">✦</span>
-                            </div>
-                        </div>
-
-                        {/* TV Mascot Body (Panics and Shakes) */}
-                        <svg viewBox="0 0 160 120" className="w-full h-full drop-shadow-xl overflow-visible animate-anime-panic" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            {/* Twitching TV Antennas */}
-                            <g className="animate-anime-antenna origin-bottom">
-                                <path d="M54 22 L32 4 M106 22 L128 4" stroke="#e50914" strokeWidth="3" strokeLinecap="round" opacity="0.9" />
-                                <circle cx="32" cy="4" r="3.5" fill="#ff4d4d" />
-                                <circle cx="128" cy="4" r="3.5" fill="#ff4d4d" />
-                            </g>
-                            
-                            {/* TV Body Frame */}
-                            <rect x="16" y="18" width="128" height="90" rx="16" fill="#181820" stroke="#333342" strokeWidth="2.5" />
-                            
-                            {/* Cute Band-Aid on Top-Right Corner */}
-                            <g transform="rotate(25 125 25)">
-                                <rect x="110" y="20" width="22" height="9" rx="3" fill="#eab308" stroke="#ca8a04" strokeWidth="1" opacity="0.85" />
-                                <circle cx="121" cy="24.5" r="1.2" fill="#ca8a04" />
-                            </g>
-
-                            {/* CRT Screen Frame */}
-                            <rect x="26" y="26" width="90" height="74" rx="10" fill="#09090d" stroke="#ef4444" strokeWidth="1.5" strokeDasharray="5 3" />
-                            
-                            {/* Subtle Glitch Scanlines */}
-                            <line x1="28" y1="40" x2="114" y2="40" stroke="#ef4444" strokeWidth="0.8" opacity="0.3" />
-                            <line x1="28" y1="56" x2="114" y2="56" stroke="#ef4444" strokeWidth="0.8" opacity="0.3" />
-                            <line x1="28" y1="72" x2="114" y2="72" stroke="#ef4444" strokeWidth="0.8" opacity="0.3" />
-                            <line x1="28" y1="88" x2="114" y2="88" stroke="#ef4444" strokeWidth="0.8" opacity="0.3" />
-                            
-                            {/* Funny Spinning Spiral Dizzy Eyes */}
-                            {/* Left Dizzy Spiral Eye */}
-                            <g transform="translate(48, 56)">
-                                <circle cx="0" cy="0" r="10" fill="#221015" />
-                                <path
-                                    className="animate-anime-spiral origin-center"
-                                    d="M0 0 C-2 -4, -6 -2, -6 0 C-6 5, 0 8, 5 5 C9 2, 8 -6, 2 -8 C-4 -9, -9 -2, -9 3"
-                                    stroke="#ff4d4d"
-                                    strokeWidth="1.8"
-                                    strokeLinecap="round"
-                                    fill="none"
-                                />
-                            </g>
-
-                            {/* Right Dizzy Spiral Eye */}
-                            <g transform="translate(94, 56)">
-                                <circle cx="0" cy="0" r="10" fill="#221015" />
-                                <path
-                                    className="animate-anime-spiral origin-center"
-                                    d="M0 0 C-2 -4, -6 -2, -6 0 C-6 5, 0 8, 5 5 C9 2, 8 -6, 2 -8 C-4 -9, -9 -2, -9 3"
-                                    stroke="#ff4d4d"
-                                    strokeWidth="1.8"
-                                    strokeLinecap="round"
-                                    fill="none"
-                                />
-                            </g>
-
-                            {/* Trembling Wavy Comic Mouth */}
-                            <path d="M62 76 Q66 71 71 76 Q76 81 81 76" stroke="#ff4d4d" strokeWidth="2.5" strokeLinecap="round" fill="none" />
-                            
-                            {/* Blushing Comic Cheeks */}
-                            <ellipse cx="38" cy="68" rx="4" ry="2" fill="#ef4444" opacity="0.4" />
-                            <ellipse cx="104" cy="68" rx="4" ry="2" fill="#ef4444" opacity="0.4" />
-
-                            {/* Dripping Giant Anime Sweatdrop */}
-                            <g className="animate-anime-sweat" transform="translate(108, 38)">
-                                <path d="M0 0 C-4 4, -4 10, 0 14 C4 10, 4 4, 0 0 Z" fill="#38bdf8" stroke="#0284c7" strokeWidth="0.8" />
-                            </g>
-
-                            {/* TV Controls Dial */}
-                            <circle cx="130" cy="42" r="5" fill="#252530" stroke="#4b4b5a" strokeWidth="1.5" />
-                            <circle cx="130" cy="62" r="5" fill="#252530" stroke="#4b4b5a" strokeWidth="1.5" />
-                            <line x1="126" y1="80" x2="134" y2="80" stroke="#e50914" strokeWidth="2" strokeLinecap="round" />
-                            <line x1="126" y1="86" x2="134" y2="86" stroke="#e50914" strokeWidth="2" strokeLinecap="round" />
-                            
-                            {/* TV Stand Base */}
-                            <path d="M48 108 L38 116 M112 108 L122 116" stroke="#333340" strokeWidth="3.5" strokeLinecap="round" />
-                        </svg>
+                        <Mascot mood="dizzy" className="w-24 h-20 sm:w-36 sm:h-28" />
                     </div>
 
                     <div className="space-y-1 max-w-md px-2 shrink-0">
@@ -471,24 +464,28 @@ const VideoPlayer = ({
             return (
                 <div className="relative group w-full h-full">
                     <video
-                        key={key}
                         ref={videoRef}
-                        className="w-full h-full object-contain bg-black"
+                        className={`w-full h-full object-contain bg-black ${isMinimized ? 'pointer-events-none' : 'pointer-events-auto'}`}
                         poster={poster}
-                        controls
+                        controls={!isMinimized}
                         playsInline
+                        disablePictureInPicture
+                        controlsList="noplaybackrate nodownload"
                         src={playerType === 'native' ? activeSrc : undefined}
-                        onEnded={onEnded}
-                        onTimeUpdate={(e) => onProgress && onProgress(e.target.currentTime, e.target.duration)}
+                        onEnded={() => onEndedRef.current && onEndedRef.current()}
+                        onTimeUpdate={(e) => onProgressRef.current && onProgressRef.current(e.target.currentTime, e.target.duration)}
                         onError={() => setLoadError(true)}
                     />
 
-                    {/* Quality Selector (HLS only) */}
-                    {playerType === 'hls' && qualities.length > 0 && (
-                        <div className="absolute bottom-16 right-4 z-20">
+                    {/* Quality Selector (HLS only, Maximized View Only, Auto-disappearing after inactivity) */}
+                    {!isMinimized && playerType === 'hls' && qualities.length > 0 && (
+                        <div className={`absolute bottom-16 right-4 z-20 transition-all duration-300 ${showControls || showQualityMenu ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-2 pointer-events-none'}`}>
                             <button
-                                onClick={() => setShowQualityMenu(!showQualityMenu)}
-                                className="p-2 bg-black/60 hover:bg-black/80 text-white rounded-full backdrop-blur-sm transition-colors cursor-pointer"
+                                onClick={() => {
+                                    setShowQualityMenu(!showQualityMenu);
+                                    handleUserActivity();
+                                }}
+                                className="p-2 bg-black/60 hover:bg-black/80 text-white rounded-full backdrop-blur-sm transition-colors cursor-pointer shadow-lg border border-white/10 hover:scale-105"
                                 title="Quality"
                             >
                                 <Settings size={20} />
@@ -519,13 +516,30 @@ const VideoPlayer = ({
             );
         }
 
-        // Default: Embedded Stream Player (Desktop Max: 0px, Mobile Max: -62px, Mini: -50px)
-        const effectiveYOffset = localYOffset !== undefined ? localYOffset : (isMinimized ? -50 : 0);
-        const effectiveScale = localScale !== undefined ? localScale : 1;
+        // Distinguish Full Website Embeds (e.g. HiAnime needing header crop) vs Standalone Player Embeds (e.g. AniKai/bibiemb)
+        const isFullSiteEmbed = Boolean(activeSrc && activeSrc.match(/hianime\.(ad|to|nz|mm|sx|is|tv)/i));
+        const isStandalonePlayer = Boolean(activeSrc && (
+            extractedSrcRef.current === activeSrc ||
+            activeSrc.includes('bibiemb') ||
+            activeSrc.includes('vivibebe') ||
+            activeSrc.includes('otakuhg') ||
+            activeSrc.includes('megacloud') ||
+            activeSrc.includes('rapid-cloud') ||
+            activeSrc.includes('playtaku') ||
+            activeSrc.includes('/embed') ||
+            activeSrc.includes('/e/')
+        ));
+
+        const effectiveYOffset = isStandalonePlayer
+            ? 0
+            : (localYOffset !== undefined ? localYOffset : (isFullSiteEmbed ? (isMinimized ? -50 : -72) : (isMinimized ? -50 : 0)));
+        const effectiveScale = isStandalonePlayer
+            ? 1
+            : (localScale !== undefined ? localScale : 1);
 
         return (
             <iframe
-                key={key}
+                key="mugen-active-iframe"
                 className={`absolute inset-0 w-full border-0 transition-transform duration-300 ${isMinimized ? 'pointer-events-none' : 'pointer-events-auto'}`}
                 style={{
                     top: `${effectiveYOffset}px`,
@@ -561,7 +575,7 @@ const VideoPlayer = ({
     };
 
     return (
-        <div className="w-full flex flex-col gap-2">
+        <div className={`w-full flex flex-col gap-2 ${isMinimized ? 'h-full' : ''}`}>
             {/* Developer Mode Toolbar (Only visible when Developer Mode is active) */}
             {devMode && (
                 <div className="flex items-center justify-between px-3 py-2 bg-black/70 border border-white/10 rounded-xl text-xs gap-3 animate-fade-in">
@@ -785,8 +799,14 @@ const VideoPlayer = ({
 
             {/* Immersive Video Canvas Container */}
             <div
-                className={`relative w-full aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl border border-gray-800/80 group ${isMinimized ? 'h-full' : ''}`}
+                className={`relative w-full aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl border border-gray-800/80 group ${isMinimized ? 'h-full !aspect-auto' : ''}`}
                 onContextMenu={(e) => e.preventDefault()}
+                onMouseMove={handleUserActivity}
+                onPointerMove={handleUserActivity}
+                onTouchStart={handleUserActivity}
+                onMouseLeave={() => {
+                    if (!showQualityMenu) setShowControls(false);
+                }}
             >
                 {renderPlayer()}
             </div>

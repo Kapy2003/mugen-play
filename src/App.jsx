@@ -2,7 +2,7 @@
  * Mugen Play
  * Created and Maintained by Kapy2003 (https://github.com/Kapy2003/)
  */
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import Sidebar from './components/layout/Sidebar';
 import AnimeDetailModal from './components/anime/AnimeDetailModal';
 import ExtensionsView from './components/extensions/ExtensionsView';
@@ -27,9 +27,7 @@ import FavoritesView from './components/views/FavoritesView';
 import SettingsView from './components/views/SettingsView';
 
 // Platform-Specific Playback Components
-import MiniPlayerOverlay from './components/mobile/MiniPlayerOverlay';
-import MobilePlayerView from './components/mobile/MobilePlayerView';
-import DesktopPlayerView from './components/desktop/DesktopPlayerView';
+import UnifiedPlaybackView from './components/player/UnifiedPlaybackView';
 
 function App() {
     // --- State ---
@@ -390,6 +388,26 @@ function App() {
     // Initialize active provider - AniList Core Metadata Engine
     const [activeProvider] = useState(() => new AnilistSource());
 
+    // Deep Link Resolution (?anime=12345 or ?id=12345)
+    useEffect(() => {
+        try {
+            const params = new URLSearchParams(window.location.search);
+            const animeParam = params.get('anime') || params.get('id') || params.get('watch');
+            if (animeParam) {
+                const numId = parseInt(animeParam, 10);
+                if (!isNaN(numId)) {
+                    activeProvider.getAnimeDetails(numId).then(details => {
+                        if (details) {
+                            setSelectedAnime(details);
+                        }
+                    }).catch(err => {
+                        console.warn('Failed to load shared anime:', err);
+                    });
+                }
+            }
+        } catch {}
+    }, [activeProvider]);
+
     // Load Discovery Shelves for Home (Trending, Popular, Top Rated)
     useEffect(() => {
         let isMounted = true;
@@ -472,7 +490,7 @@ function App() {
     };
 
     // Watch History & Progress Logic
-    const addToHistory = (anime, episode = null, progress = 0, duration = 0) => {
+    const addToHistory = useCallback((anime, episode = null, progress = 0, duration = 0) => {
         if (!anime || !anime.id) return;
 
         setWatchHistory(prev => {
@@ -490,12 +508,21 @@ function App() {
             localStorage.setItem('mugen_watch_history', JSON.stringify(newHistory));
             return newHistory;
         });
-    };
+    }, []);
 
     const playbackRef = useRef({ id: null, episode: null, progress: 0, duration: 0 });
     const lastSaveTime = useRef(0);
 
-    const reportProgress = (currentTime, duration) => {
+    const saveProgress = useCallback(() => {
+        const current = playbackRef.current;
+        if (!current.id) return;
+
+        if (selectedAnime && selectedAnime.id === current.id) {
+            addToHistory(selectedAnime, current.episode, current.progress, current.duration);
+        }
+    }, [selectedAnime, addToHistory]);
+
+    const reportProgress = useCallback((currentTime, duration) => {
         if (!playingAnime) return;
 
         playbackRef.current = {
@@ -510,16 +537,7 @@ function App() {
             saveProgress();
             lastSaveTime.current = now;
         }
-    };
-
-    const saveProgress = () => {
-        const current = playbackRef.current;
-        if (!current.id) return;
-
-        if (selectedAnime && selectedAnime.id === current.id) {
-            addToHistory(selectedAnime, current.episode, current.progress, current.duration);
-        }
-    };
+    }, [playingAnime, selectedAnime, saveProgress]);
 
     const removeFromHistory = (animeId) => {
         setWatchHistory(prev => {
@@ -544,6 +562,42 @@ function App() {
             localStorage.setItem('mugen_favorites', JSON.stringify(newFavorites));
             return newFavorites;
         });
+    };
+
+    const handleRemoveFavorite = (animeOrId) => {
+        const targetId = typeof animeOrId === 'object' && animeOrId !== null
+            ? (animeOrId.id !== undefined ? animeOrId.id : (animeOrId._id || animeOrId.slug))
+            : animeOrId;
+
+        setFavorites(prev => {
+            const newFavorites = prev.filter(item => {
+                const itemId = item.id !== undefined ? item.id : (item._id || item.slug);
+                return String(itemId) !== String(targetId) && itemId !== targetId;
+            });
+            localStorage.setItem('mugen_favorites', JSON.stringify(newFavorites));
+            return newFavorites;
+        });
+        showToast("Removed from Favorites", "info");
+    };
+
+    const handleRemoveMultipleFavorites = (animeOrIds) => {
+        if (!animeOrIds || animeOrIds.length === 0) return;
+        const targetIds = animeOrIds.map(item =>
+            typeof item === 'object' && item !== null
+                ? String(item.id !== undefined ? item.id : (item._id || item.slug))
+                : String(item)
+        );
+        const idsSet = new Set(targetIds);
+
+        setFavorites(prev => {
+            const newFavorites = prev.filter(item => {
+                const itemId = item.id !== undefined ? String(item.id) : String(item._id || item.slug);
+                return !idsSet.has(itemId);
+            });
+            localStorage.setItem('mugen_favorites', JSON.stringify(newFavorites));
+            return newFavorites;
+        });
+        showToast(`Removed ${animeOrIds.length} anime from Favorites`, "info");
     };
 
     const saveExtensions = (updatedExtensions) => {
@@ -852,6 +906,8 @@ function App() {
                     <FavoritesView
                         favorites={favorites}
                         onSelectAnime={setSelectedAnime}
+                        onRemoveFavorite={handleRemoveFavorite}
+                        onRemoveMultipleFavorites={handleRemoveMultipleFavorites}
                     />
                 );
 
@@ -950,15 +1006,26 @@ function App() {
                 {renderContent()}
             </main>
 
-            {/* Minimized Draggable Floating Miniplayer */}
-            {playingAnime && isPlayerMinimized && (
-                <MiniPlayerOverlay
+            {/* Unified Continuous Playback View (Persistent VideoPlayer DOM Node across Minimized & Maximized) */}
+            {playingAnime && (
+                <UnifiedPlaybackView
                     playingAnime={playingAnime}
+                    isMinimized={isPlayerMinimized}
+                    isDesktop={isDesktop}
+                    onMinimize={() => setIsPlayerMinimized(true)}
                     onExpand={() => setIsPlayerMinimized(false)}
                     onClose={() => setPlayingAnime(null)}
-                    miniVideoScale={!isDesktop && miniVideoScale === 1 ? 0.92 : miniVideoScale}
-                    miniVideoYOffset={!isDesktop && miniVideoYOffset === -50 ? -62 : miniVideoYOffset}
+                    extensions={extensions}
+                    playbackSource={playbackSource}
+                    onSelectSource={(newSourceId) => {
+                        setPlaybackSource(newSourceId);
+                        handlePlay(playingAnime, playingAnime?.currentEpisode || 1, newSourceId);
+                    }}
+                    videoScale={videoScale}
                     videoXOffset={videoXOffset}
+                    videoYOffset={videoYOffset}
+                    miniVideoScale={miniVideoScale}
+                    miniVideoYOffset={miniVideoYOffset}
                     devMode={devMode}
                     onUpdateStreamUrl={(newUrl) => setPlayingAnime(prev => prev ? { ...prev, url: newUrl, streamUrl: newUrl } : null)}
                     reportProgress={reportProgress}
@@ -972,85 +1039,23 @@ function App() {
                             await handlePlay(playingAnime, playingAnime.currentEpisode || 1);
                         }
                     }}
+                    isSidebarVisible={isSidebarVisible}
+                    setIsSidebarVisible={setIsSidebarVisible}
+                    currentEpisodePage={currentEpisodePage}
+                    setCurrentEpisodePage={setCurrentEpisodePage}
+                    onPlayEpisode={handlePlay}
                 />
-            )}
-
-            {/* Maximized Playback View: Desktop vs Mobile Viewport */}
-            {playingAnime && !isPlayerMinimized && (
-                isDesktop ? (
-                    <DesktopPlayerView
-                        playingAnime={playingAnime}
-                        onMinimize={() => setIsPlayerMinimized(true)}
-                        onClose={() => setPlayingAnime(null)}
-                        extensions={extensions}
-                        playbackSource={playbackSource}
-                        onSelectSource={(newSourceId) => {
-                            setPlaybackSource(newSourceId);
-                            handlePlay(playingAnime, playingAnime?.currentEpisode || 1, newSourceId);
-                        }}
-                        videoScale={videoScale}
-                        videoXOffset={videoXOffset}
-                        videoYOffset={videoYOffset}
-                        devMode={devMode}
-                        onUpdateStreamUrl={(newUrl) => setPlayingAnime(prev => prev ? { ...prev, url: newUrl, streamUrl: newUrl } : null)}
-                        reportProgress={reportProgress}
-                        saveProgress={saveProgress}
-                        onOpenExtensionStore={() => {
-                            setActiveTab('extensions');
-                            setPlayingAnime(null);
-                        }}
-                        onRetry={async () => {
-                            if (playingAnime) {
-                                await handlePlay(playingAnime, playingAnime.currentEpisode || 1);
-                            }
-                        }}
-                        isSidebarVisible={isSidebarVisible}
-                        setIsSidebarVisible={setIsSidebarVisible}
-                        currentEpisodePage={currentEpisodePage}
-                        setCurrentEpisodePage={setCurrentEpisodePage}
-                        onPlayEpisode={handlePlay}
-                    />
-                ) : (
-                    <MobilePlayerView
-                        playingAnime={playingAnime}
-                        onMinimize={() => setIsPlayerMinimized(true)}
-                        onClose={() => setPlayingAnime(null)}
-                        extensions={extensions}
-                        playbackSource={playbackSource}
-                        onSelectSource={(newSourceId) => {
-                            setPlaybackSource(newSourceId);
-                            handlePlay(playingAnime, playingAnime?.currentEpisode || 1, newSourceId);
-                        }}
-                        videoScale={videoScale}
-                        videoXOffset={videoXOffset}
-                        videoYOffset={videoYOffset === -72 ? -62 : videoYOffset}
-                        devMode={devMode}
-                        onUpdateStreamUrl={(newUrl) => setPlayingAnime(prev => prev ? { ...prev, url: newUrl, streamUrl: newUrl } : null)}
-                        reportProgress={reportProgress}
-                        saveProgress={saveProgress}
-                        onOpenExtensionStore={() => {
-                            setActiveTab('extensions');
-                            setPlayingAnime(null);
-                        }}
-                        onRetry={async () => {
-                            if (playingAnime) {
-                                await handlePlay(playingAnime, playingAnime.currentEpisode || 1);
-                            }
-                        }}
-                        currentEpisodePage={currentEpisodePage}
-                        setCurrentEpisodePage={setCurrentEpisodePage}
-                        onPlayEpisode={handlePlay}
-                    />
-                )
             )}
 
             {/* Modals & Overlays */}
             <AnimeDetailModal
+                isOpen={Boolean(selectedAnime)}
                 anime={selectedAnime}
                 onClose={() => setSelectedAnime(null)}
                 onPlay={handlePlay}
                 isFavorite={selectedAnime && favorites.some(f => f.id === selectedAnime.id)}
                 onToggleFavorite={toggleFavorite}
+                showToast={showToast}
             />
 
             <AddSourceModal

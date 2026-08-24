@@ -142,9 +142,11 @@ const MobilePlayerView = ({
                                     <Star size={14} className="fill-amber-400 text-amber-400 shrink-0" />
                                     {playingAnime.rating ? (playingAnime.rating > 10 ? (playingAnime.rating / 10).toFixed(1) : Number(playingAnime.rating).toFixed(1)) : '8.5'}
                                 </span>
-                                <span className="playback-pill px-3 py-1 rounded-full bg-white/10 border border-white/20 text-white font-bold">
-                                    {playingAnime.year || 2024}
-                                </span>
+                                {playingAnime.year && (
+                                    <span className="playback-pill px-3 py-1 rounded-full bg-white/10 border border-white/20 text-white font-bold">
+                                        {playingAnime.year}
+                                    </span>
+                                )}
                                 <span className="playback-pill px-3 py-1 rounded-full bg-white/10 border border-white/20 text-white font-bold">
                                     {playingAnime.episodes || 12} Episodes
                                 </span>

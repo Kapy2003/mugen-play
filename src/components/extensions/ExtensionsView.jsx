@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Power, Trash2, Cog, ShoppingBag, RotateCcw, AlertCircle, Activity, Loader2, Plus, Sparkles, Film } from 'lucide-react';
 import ExtensionStoreModal from './ExtensionStoreModal';
 import { ExtensionHealthChecker } from '../../lib/ExtensionHealthChecker';
@@ -16,6 +16,17 @@ const ExtensionsView = ({
     const [isStoreOpen, setIsStoreOpen] = useState(false);
     const [checkingId, setCheckingId] = useState(null);
     const [isAuditing, setIsAuditing] = useState(false);
+
+    // Sort extensions alphabetically while keeping Core metadata engine pinned at the top
+    const sortedExtensions = useMemo(() => {
+        return [...extensions].sort((a, b) => {
+            const aIsCore = a.isCore || a.type === 'metadata' || a.id === 'anilist_source';
+            const bIsCore = b.isCore || b.type === 'metadata' || b.id === 'anilist_source';
+            if (aIsCore && !bIsCore) return -1;
+            if (!aIsCore && bIsCore) return 1;
+            return (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' });
+        });
+    }, [extensions]);
 
     const handleAuditAll = async () => {
         setIsAuditing(true);
@@ -111,7 +122,7 @@ const ExtensionsView = ({
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {/* Installed Extensions Cards */}
-                {extensions.map((ext) => {
+                {sortedExtensions.map((ext) => {
                     const isDead = ext.status === 'dead';
                     const isMetadata = ext.type === 'metadata' || ext.id === 'anilist_source';
                     const isCardChecking = checkingId === ext.id || isAuditing;

@@ -30,7 +30,7 @@ export class CanonicalAnime {
         this.synopsis = (data.synopsis || data.description || '').replace(/<[^>]*>?/gm, '').trim();
         this.episodes = parseInt(data.episodes || data.totalEpisodes, 10) || 12;
         this.rating = parseFloat(data.rating || data.averageScore || 0);
-        this.year = parseInt(data.year || data.seasonYear, 10) || new Date().getFullYear();
+        this.year = parseInt(data.year || data.seasonYear || data.startDate?.year, 10) || null;
         this.season = data.season || '';
         this.format = data.format || (this.episodes === 1 ? 'MOVIE' : 'TV');
         this.status = data.status || 'FINISHED';

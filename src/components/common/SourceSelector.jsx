@@ -29,7 +29,11 @@ const SourceSelector = ({ options = [], currentId, onSelect, className = '' }) =
                 onChange={handleChange}
                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer appearance-none z-20"
             >
-                {options.map((option) => (
+                {options.slice().sort((a, b) => {
+                    if (a.id === 'none') return 1;
+                    if (b.id === 'none') return -1;
+                    return (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' });
+                }).map((option) => (
                     <option key={option.id} value={option.id} className="bg-gray-900 text-white py-2">
                         {option.name}
                     </option>

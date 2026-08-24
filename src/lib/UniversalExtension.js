@@ -1,4 +1,4 @@
-import { Extension } from './ExtensionSDK';
+import { Extension } from './ExtensionSDK.js';
 
 /**
  * UniversalExtension

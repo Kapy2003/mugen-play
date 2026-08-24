@@ -63,7 +63,9 @@ export const ExtensionRepoManager = {
             c => c.baseUrl && !existingUrls.has(this.normalizeUrl(c.baseUrl))
         );
 
-        return [...uniqueCustom, ...ANIYOMI_SOURCES];
+        return [...uniqueCustom, ...ANIYOMI_SOURCES].sort((a, b) =>
+            (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' })
+        );
     },
 
     /**
@@ -138,13 +140,17 @@ export const ExtensionRepoManager = {
     },
 
     normalizeUrl(urlStr) {
-        return (urlStr || '').trim().toLowerCase().replace(/\/+$/, '');
+        return (urlStr || '').trim().toLowerCase().replace(/\/home\/?$/i, '').replace(/\/+$/, '');
     },
 
     extractDomain(urlStr) {
         try {
             const parsed = new URL(urlStr);
-            const host = parsed.hostname.replace('www.', '');
+            const host = parsed.hostname.replace(/^www\d*\./i, '');
+            if (host.includes('anikai') || host.includes('animekai')) return 'AniKai';
+            if (host.includes('hianime')) return 'HiAnime';
+            if (host.includes('aniwatch')) return 'AniWatch';
+            if (host.includes('gogo') || host.includes('anitaku')) return 'GogoAnime';
             return host.charAt(0).toUpperCase() + host.slice(1);
         } catch {
             return 'Custom Source';

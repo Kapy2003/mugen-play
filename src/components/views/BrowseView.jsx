@@ -1,12 +1,18 @@
 import { Compass, Filter, Search, X, RotateCcw } from 'lucide-react';
 import AnimeCard from '../anime/AnimeCard';
 import { formatAnimeTitle } from '../../lib/formatters';
+import Mascot from '../common/Mascot';
 
 const GENRES = [
     'All', 'Action', 'Adventure', 'Comedy', 'Drama', 'Fantasy',
     'Romance', 'Sci-Fi', 'Supernatural', 'Mystery', 'Thriller',
     'Slice of Life', 'Sports', 'Mecha', 'Horror', 'Ecchi'
 ];
+
+// Historical Year Range: 1940 to future releases
+const currentMaxYear = new Date().getFullYear() + 1;
+const oldestAnimeYear = 1940;
+const YEARS_LIST = Array.from({ length: currentMaxYear - oldestAnimeYear + 1 }, (_, i) => currentMaxYear - i);
 
 const BrowseView = ({
     animeList = [],
@@ -29,7 +35,34 @@ const BrowseView = ({
     onSelectAnime,
     watchHistory = []
 }) => {
-    const activeFilterCount = Object.keys(filters || {}).length + (contentFilter !== 'ALL' ? 1 : 0);
+    const selectedGenres = Array.isArray(filters?.genres)
+        ? filters.genres
+        : (filters?.genre ? [filters.genre] : []);
+
+    const isAllSelected = selectedGenres.length === 0;
+
+    const handleToggleGenre = (g) => {
+        if (g === 'All') {
+            onFilterChange('genres', []);
+            onFilterChange('genre', '');
+            return;
+        }
+        const next = selectedGenres.includes(g)
+            ? selectedGenres.filter(item => item !== g)
+            : [...selectedGenres, g];
+        onFilterChange('genres', next);
+        onFilterChange('genre', next.length === 1 ? next[0] : '');
+    };
+
+    const otherFilterKeys = Object.keys(filters || {}).filter(k => k !== 'genres' && k !== 'genre');
+    const activeFilterCount = otherFilterKeys.length + selectedGenres.length + (contentFilter !== 'ALL' ? 1 : 0);
+
+    const getHeaderTitle = () => {
+        if (searchQuery) return `Search: "${searchQuery}"`;
+        if (selectedGenres.length === 1) return `${selectedGenres[0]} Anime`;
+        if (selectedGenres.length > 1) return `${selectedGenres.join(' + ')} Anime`;
+        return 'Browse Catalog';
+    };
 
     return (
         <div className="p-3 sm:p-8 flex flex-col gap-4 sm:gap-6 animate-fade-in max-w-full overflow-hidden">
@@ -39,7 +72,7 @@ const BrowseView = ({
                     <div>
                         <h2 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2">
                             <Compass className="w-6 h-6 text-red-500" />
-                            <span>{searchQuery ? `Search: "${searchQuery}"` : (filters?.genre ? `${filters.genre} Anime` : 'Browse Catalog')}</span>
+                            <span>{getHeaderTitle()}</span>
                         </h2>
                         <p className="text-xs sm:text-sm text-gray-400 mt-0.5">
                             Explore, filter, and stream from thousands of titles via AniList
@@ -51,7 +84,7 @@ const BrowseView = ({
                         </span>
                         <button
                             onClick={() => setShowSourceMenu(!showSourceMenu)}
-                            className={`px-3.5 py-2.5 rounded-xl font-medium text-xs sm:text-sm transition-all flex items-center gap-2 cursor-pointer shadow-md ${showSourceMenu || activeFilterCount > 0 ? 'bg-red-600 text-white shadow-red-900/30' : 'bg-gray-800 text-gray-300 hover:text-white hover:bg-gray-700'}`}
+                            className={`browse-filter-toggle px-3.5 py-2.5 rounded-xl font-medium text-xs sm:text-sm transition-all flex items-center gap-2 cursor-pointer shadow-md ${showSourceMenu || activeFilterCount > 0 ? 'bg-red-600 text-white shadow-red-900/30' : 'bg-gray-800 text-gray-300 hover:text-white hover:bg-gray-700'}`}
                             title="Toggle Filter Options"
                         >
                             <Filter className="w-4 h-4" />
@@ -86,21 +119,24 @@ const BrowseView = ({
                     )}
                 </div>
 
-                {/* Quick Genre Filter Pills */}
+                {/* Multi-Select Genre Filter Pills */}
                 <div className="flex gap-2 overflow-x-auto no-scrollbar py-1 select-none touch-pan-x overscroll-x-contain">
                     {GENRES.map(g => {
-                        const isSelected = (g === 'All' && !filters?.genre) || (filters?.genre === g);
+                        const isSelected = g === 'All' ? isAllSelected : selectedGenres.includes(g);
                         return (
                             <button
                                 key={g}
-                                onClick={() => onFilterChange('genre', g === 'All' ? '' : g)}
-                                className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all duration-200 cursor-pointer ${
+                                onClick={() => handleToggleGenre(g)}
+                                className={`genre-pill px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all duration-200 cursor-pointer ${
                                     isSelected
                                         ? 'bg-red-600 text-white shadow-lg shadow-red-900/30 ring-1 ring-red-400'
                                         : 'bg-gray-900 text-gray-400 hover:text-white hover:bg-gray-800 border border-gray-800 hover:border-gray-700'
                                 }`}
                             >
                                 {g}
+                                {g !== 'All' && selectedGenres.includes(g) && (
+                                    <span className="ml-1 opacity-80">✓</span>
+                                )}
                             </button>
                         );
                     })}
@@ -108,14 +144,14 @@ const BrowseView = ({
 
                 {/* Advanced Filters Drawer */}
                 {showSourceMenu && (
-                    <div className="bg-gray-900/95 border border-gray-800 rounded-2xl p-4 sm:p-5 flex flex-wrap gap-4 animate-fade-in shadow-xl items-end">
+                    <div className="browse-filter-drawer bg-gray-900/95 border border-gray-800 rounded-2xl p-4 sm:p-5 flex flex-wrap gap-4 animate-fade-in shadow-xl items-end">
                         {/* Sort */}
                         <div className="space-y-1.5 flex-1 min-w-[140px]">
-                            <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Sort Order</label>
+                            <label className="browse-filter-label text-xs font-bold text-gray-400 uppercase tracking-wider">Sort Order</label>
                             <select
                                 value={filters?.sort || 'POPULARITY_DESC'}
                                 onChange={(e) => onFilterChange('sort', e.target.value)}
-                                className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 cursor-pointer"
+                                className="browse-filter-select w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 cursor-pointer"
                             >
                                 <option value="POPULARITY_DESC">🔥 Most Popular</option>
                                 <option value="TRENDING_DESC">📈 Trending</option>
@@ -129,11 +165,11 @@ const BrowseView = ({
 
                         {/* Format */}
                         <div className="space-y-1.5 flex-1 min-w-[120px]">
-                            <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Format</label>
+                            <label className="browse-filter-label text-xs font-bold text-gray-400 uppercase tracking-wider">Format</label>
                             <select
                                 value={filters?.format || ''}
                                 onChange={(e) => onFilterChange('format', e.target.value)}
-                                className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 cursor-pointer"
+                                className="browse-filter-select w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 cursor-pointer"
                             >
                                 <option value="">Any Format</option>
                                 <option value="TV">TV Show</option>
@@ -147,11 +183,11 @@ const BrowseView = ({
 
                         {/* Season */}
                         <div className="space-y-1.5 flex-1 min-w-[110px]">
-                            <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Season</label>
+                            <label className="browse-filter-label text-xs font-bold text-gray-400 uppercase tracking-wider">Season</label>
                             <select
                                 value={filters?.season || ''}
                                 onChange={(e) => onFilterChange('season', e.target.value)}
-                                className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 cursor-pointer"
+                                className="browse-filter-select w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 cursor-pointer"
                             >
                                 <option value="">Any Season</option>
                                 <option value="WINTER">Winter</option>
@@ -161,16 +197,16 @@ const BrowseView = ({
                             </select>
                         </div>
 
-                        {/* Year */}
+                        {/* Year (Full 1940 - Future Range) */}
                         <div className="space-y-1.5 flex-1 min-w-[100px]">
-                            <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Year</label>
+                            <label className="browse-filter-label text-xs font-bold text-gray-400 uppercase tracking-wider">Year</label>
                             <select
                                 value={filters?.year || ''}
                                 onChange={(e) => onFilterChange('year', e.target.value)}
-                                className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 cursor-pointer"
+                                className="browse-filter-select w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 cursor-pointer"
                             >
                                 <option value="">Any Year</option>
-                                {Array.from({ length: 30 }, (_, i) => new Date().getFullYear() - i).map(y => (
+                                {YEARS_LIST.map(y => (
                                     <option key={y} value={y}>{y}</option>
                                 ))}
                             </select>
@@ -178,11 +214,11 @@ const BrowseView = ({
 
                         {/* Status */}
                         <div className="space-y-1.5 flex-1 min-w-[120px]">
-                            <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Status</label>
+                            <label className="browse-filter-label text-xs font-bold text-gray-400 uppercase tracking-wider">Status</label>
                             <select
                                 value={filters?.status || ''}
                                 onChange={(e) => onFilterChange('status', e.target.value)}
-                                className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 cursor-pointer"
+                                className="browse-filter-select w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 cursor-pointer"
                             >
                                 <option value="">Any Status</option>
                                 <option value="RELEASING">Airing</option>
@@ -195,11 +231,11 @@ const BrowseView = ({
 
                         {/* Content Rating */}
                         <div className="space-y-1.5 flex-1 min-w-[120px]">
-                            <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Content</label>
+                            <label className="browse-filter-label text-xs font-bold text-gray-400 uppercase tracking-wider">Content</label>
                             <select
                                 value={contentFilter}
                                 onChange={(e) => onCycleContentFilter(e.target.value)}
-                                className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 cursor-pointer"
+                                className="browse-filter-select w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 cursor-pointer"
                             >
                                 <option value="ALL">All (Safe + NSFW)</option>
                                 <option value="SAFE">Safe Only</option>
@@ -212,7 +248,7 @@ const BrowseView = ({
                             <div className="flex-1 min-w-[130px]">
                                 <button
                                     onClick={onResetFilters}
-                                    className="w-full px-3 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white rounded-xl text-sm font-semibold transition-colors flex items-center justify-center gap-1.5 border border-gray-700 cursor-pointer"
+                                    className="browse-reset-btn w-full px-3 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white rounded-xl text-sm font-semibold transition-colors flex items-center justify-center gap-1.5 border border-gray-700 cursor-pointer"
                                 >
                                     <RotateCcw className="w-4 h-4" />
                                     <span>Reset Filters</span>
@@ -255,7 +291,7 @@ const BrowseView = ({
                         <button
                             onClick={() => setPage(p => Math.max(1, p - 1))}
                             disabled={page === 1}
-                            className={`px-4 py-2 rounded-xl border font-medium text-sm transition-colors cursor-pointer ${
+                            className={`browse-page-btn px-4 py-2 rounded-xl border font-medium text-sm transition-colors cursor-pointer ${
                                 page === 1
                                     ? 'border-gray-800 text-gray-600 cursor-not-allowed'
                                     : 'border-gray-700 text-gray-300 hover:text-white hover:border-gray-500 bg-gray-900'
@@ -267,7 +303,7 @@ const BrowseView = ({
                         <button
                             onClick={() => setPage(p => p + 1)}
                             disabled={!hasNextPage}
-                            className={`px-4 py-2 rounded-xl border font-medium text-sm transition-colors cursor-pointer ${
+                            className={`browse-page-btn px-4 py-2 rounded-xl border font-medium text-sm transition-colors cursor-pointer ${
                                 !hasNextPage
                                     ? 'border-gray-800 text-gray-600 cursor-not-allowed'
                                     : 'border-gray-700 text-gray-300 hover:text-white hover:border-gray-500 bg-gray-900'
@@ -281,10 +317,10 @@ const BrowseView = ({
 
             {/* Empty State */}
             {!isLoading && animeList.length === 0 && (
-                <div className="text-center py-20 bg-gray-900/50 border border-gray-800 rounded-3xl p-8 max-w-lg mx-auto">
-                    <Search className="w-12 h-12 mx-auto mb-4 text-gray-600" />
+                <div className="text-center py-16 bg-gray-900/50 border border-gray-800 rounded-3xl p-8 max-w-lg mx-auto animate-fade-in flex flex-col items-center">
+                    <Mascot mood="dizzy" className="w-32 h-26 sm:w-40 sm:h-32 mb-3" />
                     <h3 className="text-lg font-bold text-white mb-1">No Anime Found</h3>
-                    <p className="text-sm text-gray-400 mb-6">
+                    <p className="text-sm text-gray-400 mb-6 max-w-xs">
                         We couldn&apos;t find any titles matching your query or filter criteria.
                     </p>
                     <button

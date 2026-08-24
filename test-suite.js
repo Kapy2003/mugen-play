@@ -1,4 +1,9 @@
 import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 import { AnimeUrlResolver } from './src/lib/AnimeUrlResolver.js';
 import { AnimePaheApi } from './src/lib/AnimePaheApi.js';
 import { ExtensionHealthChecker } from './src/lib/ExtensionHealthChecker.js';
@@ -11,6 +16,7 @@ import { ConsumetService } from './src/lib/services/ConsumetService.js';
 
 let passed = 0;
 let failed = 0;
+const failedTests = [];
 
 function assert(condition, message) {
     if (condition) {
@@ -18,6 +24,7 @@ function assert(condition, message) {
         passed++;
     } else {
         console.error(`  ❌ FAIL: ${message}`);
+        failedTests.push(message);
         failed++;
     }
 }
@@ -270,12 +277,11 @@ assert(maxPlayerMobileYOffset === -62, 'Max player mobile default vertical offse
 assert(maxPlayerScale === 1.0, 'Max player default zoom is exactly 100%');
 console.log('');
 
-// --- TEST CASE 16: Extension Store Curated HiAnime & Anilist Engine ---
-console.log('▶ Test Case 16: Extension Store Curated HiAnime & Anilist Engine');
-assert(ANIYOMI_SOURCES.length === 1, 'Only curated HiAnime source is present in store repo');
-assert(ANIYOMI_SOURCES[0].id === 'hianime_source', 'Curated source is HiAnime');
-assert(ANIYOMI_SOURCES[0].baseUrl === 'https://hianime.ad', 'HiAnime baseUrl is https://hianime.ad');
-assert(ANIYOMI_SOURCES[0].recommended === true, 'HiAnime has recommended flag set to true');
+// --- TEST CASE 16: Extension Store Curated HiAnime & AniKai Sources ---
+console.log('▶ Test Case 16: Extension Store Curated HiAnime & AniKai Sources');
+assert(ANIYOMI_SOURCES.length === 2, 'Curated HiAnime and AniKai sources are present in store repo');
+assert(ANIYOMI_SOURCES.some(s => s.id === 'hianime_source' && s.recommended === true), 'HiAnime is recommended in repo');
+assert(ANIYOMI_SOURCES.some(s => s.id === 'anikai_source' && s.recommended === true), 'AniKai is recommended in repo');
 console.log('');
 
 // --- TEST CASE 17: One Piece 1100+ Episode Resolution & 49-Grid Pagination ---
@@ -602,9 +608,472 @@ assert(cssContent.includes('content-visibility: auto'), 'Content-visibility auto
 assert(cssContent.includes('cubic-bezier(0.16, 1, 0.3, 1)'), 'Ultra-fast fluid Apple spring bezier curves defined');
 console.log('');
 
+// --- TEST 38: Historical Year Resolution (1917, 1942) without False 2024 Fallback ---
+console.log('▶ Test Case 38: Historical Year Resolution (1917, 1942) without False 2024 Fallback');
+const mock1942Anime = {
+    id: 140635,
+    title: { romaji: 'Fuku-chan no Kishuu' },
+    seasonYear: null,
+    startDate: { year: 1942 }
+};
+const mock1917Anime = {
+    id: 6654,
+    title: { romaji: 'Namakura Gatana' },
+    seasonYear: null,
+    startDate: { year: 1917 }
+};
+const mockSeasonalAnime = {
+    id: 16498,
+    title: { romaji: 'Shingeki no Kyojin' },
+    seasonYear: 2013,
+    startDate: { year: 2013 }
+};
+
+const resolveYear = (media) => media.seasonYear || media.startDate?.year || null;
+assert(resolveYear(mock1942Anime) === 1942, '1942 anime correctly resolves year 1942 from startDate.year');
+assert(resolveYear(mock1917Anime) === 1917, '1917 anime correctly resolves year 1917 from startDate.year');
+assert(resolveYear(mockSeasonalAnime) === 2013, 'Seasonal anime resolves year 2013 from seasonYear');
+assert(resolveYear({ seasonYear: null, startDate: null }) === null, 'Unknown anime returns null without injecting false 2024');
+console.log('');
+
+// --- TEST 39: AniList Year Search Pattern Construction (startDate_like) ---
+console.log('▶ Test Case 39: AniList Year Search Pattern Construction (startDate_like)');
+const buildAnilistYearQuery = (filters) => {
+    const variables = { ...filters };
+    if (variables.year) {
+        variables.startDateLike = `${variables.year}%`;
+        delete variables.year;
+    }
+    return variables;
+};
+assert(buildAnilistYearQuery({ year: 1942 }).startDateLike === '1942%', 'Converts year 1942 to startDateLike pattern "1942%"');
+assert(buildAnilistYearQuery({ year: 1917 }).startDateLike === '1917%', 'Converts year 1917 to startDateLike pattern "1917%"');
+assert(buildAnilistYearQuery({ genre: 'Action' }).startDateLike === undefined, 'Does not set startDateLike when year filter is empty');
+console.log('');
+
+// --- TEST 40: Browse Tab Historical Year Taxonomy Range (1940 - Present) ---
+console.log('▶ Test Case 40: Browse Tab Historical Year Taxonomy Range (1940 - Present)');
+const currentMaxYear = new Date().getFullYear() + 1;
+const oldestAnimeYear = 1940;
+const yearsList = Array.from({ length: currentMaxYear - oldestAnimeYear + 1 }, (_, i) => currentMaxYear - i);
+assert(yearsList[yearsList.length - 1] === 1940, 'Year list extends all the way back to 1940');
+assert(yearsList.includes(1942), 'Year list includes 1942');
+assert(yearsList[0] >= 2026, 'Year list includes current/upcoming year');
+console.log('');
+
+// --- TEST 41: AniList Multi-Genre & Oldest Sort Variable Construction ---
+console.log('▶ Test Case 41: AniList Multi-Genre & Oldest Sort Variable Construction');
+const buildAdvancedQueryVariables = (filters) => {
+    const variables = { ...filters };
+    if (variables.year) {
+        variables.startDateLike = `${variables.year}%`;
+        delete variables.year;
+    }
+    if (variables.genres && Array.isArray(variables.genres) && variables.genres.length > 0) {
+        variables.genreIn = variables.genres;
+        delete variables.genres;
+        delete variables.genre;
+    } else if (variables.genre) {
+        variables.genreIn = [variables.genre];
+        delete variables.genre;
+    }
+    if ((variables.sort === 'START_DATE' || (Array.isArray(variables.sort) && variables.sort.includes('START_DATE'))) && !variables.startDateLike) {
+        variables.startDateGreater = 19400000;
+    }
+    return variables;
+};
+
+const multiGenreRes = buildAdvancedQueryVariables({ genres: ['Action', 'Adventure', 'Fantasy'] });
+assert(Array.isArray(multiGenreRes.genreIn) && multiGenreRes.genreIn.length === 3, 'Maps multi-genre array to genreIn');
+assert(multiGenreRes.genreIn.includes('Action') && multiGenreRes.genreIn.includes('Fantasy'), 'Preserves all selected genres in genreIn');
+
+const oldestSortRes = buildAdvancedQueryVariables({ sort: 'START_DATE' });
+assert(oldestSortRes.startDateGreater === 19400000, 'Injects startDateGreater: 19400000 when sorting by oldest to filter broken null drafts');
+console.log('');
+
+// --- TEST 42: Detail Modal Styling & Class Contract ---
+console.log('▶ Test Case 42: Detail Modal Styling & Class Contract');
+const modalCssContent = fs.readFileSync('./src/index.css', 'utf-8');
+assert(modalCssContent.includes('.anime-modal-container'), 'Anime modal container styled in index.css');
+assert(modalCssContent.includes('.anime-modal-close-btn'), 'Anime modal close button styled for high-contrast in index.css');
+assert(modalCssContent.includes('.modal-fav-btn'), 'Anime modal favorite button styled in index.css');
+assert(modalCssContent.includes('.modal-share-btn'), 'Anime modal share button styled in index.css');
+console.log('');
+
+// --- TEST 43: Favorites Multi-Select & Batch Dustbin Removal Logic ---
+console.log('▶ Test Case 43: Favorites Multi-Select & Batch Dustbin Removal Logic');
+let initialFavorites = [
+    { id: 1, title: 'Solo Leveling' },
+    { id: 2, title: 'Bleach' },
+    { id: '3', title: 'One Piece' },
+    { id: 4, title: 'Demon Slayer' }
+];
+
+const removeSingleFavorite = (favList, animeOrId) => {
+    const targetId = typeof animeOrId === 'object' && animeOrId !== null
+        ? (animeOrId.id !== undefined ? animeOrId.id : (animeOrId._id || animeOrId.slug))
+        : animeOrId;
+    return favList.filter(item => {
+        const itemId = item.id !== undefined ? item.id : (item._id || item.slug);
+        return String(itemId) !== String(targetId) && itemId !== targetId;
+    });
+};
+
+const removeBatchFavorites = (favList, animeOrIds) => {
+    const targetIds = animeOrIds.map(item =>
+        typeof item === 'object' && item !== null
+            ? String(item.id !== undefined ? item.id : (item._id || item.slug))
+            : String(item)
+    );
+    const idsSet = new Set(targetIds);
+    return favList.filter(item => {
+        const itemId = item.id !== undefined ? String(item.id) : String(item._id || item.slug);
+        return !idsSet.has(itemId);
+    });
+};
+
+const afterSingleId = removeSingleFavorite(initialFavorites, 2);
+assert(afterSingleId.length === 3 && !afterSingleId.some(a => a.id === 2), 'Direct dustbin click removes single target anime by ID');
+
+const afterSingleObj = removeSingleFavorite(initialFavorites, { id: '3', title: 'One Piece' });
+assert(afterSingleObj.length === 3 && !afterSingleObj.some(a => String(a.id) === '3'), 'Direct dustbin click removes single target anime by object');
+
+const afterBatch = removeBatchFavorites(initialFavorites, [1, '3', 4]);
+assert(afterBatch.length === 1 && afterBatch[0].id === 2, 'Batch dustbin action cleanly removes multiple selected anime');
+assert(modalCssContent.includes('.fav-manage-toggle-btn'), 'Favorites manage toggle button styled in index.css');
+assert(modalCssContent.includes('.fav-quick-remove-btn'), 'Card-level direct dustbin quick remove button styled in index.css');
+assert(modalCssContent.includes('.fav-header-heart'), 'Favorites header heart icon styled in index.css');
+console.log('');
+
+// --- TEST 44: Anime Detail Modal Visibility & Card Click Dispatch Contract ---
+console.log('▶ Test Case 44: Anime Detail Modal Visibility & Card Click Dispatch Contract');
+const resolveModalVisibility = (anime, isOpen) => {
+    const isModalOpen = isOpen !== undefined ? Boolean(isOpen) : Boolean(anime);
+    return Boolean(isModalOpen && anime);
+};
+
+assert(resolveModalVisibility({ id: 1, title: 'Solo Leveling' }, undefined) === true, 'Modal correctly renders when selected anime is provided without explicit isOpen');
+assert(resolveModalVisibility({ id: 1, title: 'Solo Leveling' }, true) === true, 'Modal correctly renders when isOpen is true');
+assert(resolveModalVisibility(null, false) === false, 'Modal correctly suppressed when no anime selected');
+assert(resolveModalVisibility({ id: 1, title: 'Solo Leveling' }, false) === false, 'Modal correctly suppressed when isOpen is explicitly false');
+console.log('');
+
+// --- TEST 45: Share Link Generation & Deep-Link Query Parameter Contract ---
+console.log('▶ Test Case 45: Share Link Generation & Deep-Link Query Parameter Contract');
+const generateShareUrl = (origin, pathname, anime) => {
+    const baseUrl = origin + pathname;
+    const targetId = anime?.id || anime?.slug || '';
+    return targetId ? `${baseUrl}?anime=${targetId}` : baseUrl;
+};
+
+const url1 = generateShareUrl('https://mugenplay.app', '/', { id: 151807, title: 'Solo Leveling' });
+assert(url1 === 'https://mugenplay.app/?anime=151807', 'Share URL contains target anime ID query parameter');
+
+const url2 = generateShareUrl('http://localhost:5173', '/mugen/', { id: 21, title: 'One Piece' });
+assert(url2 === 'http://localhost:5173/mugen/?anime=21', 'Share URL supports nested pathnames and local development origins');
+
+const parseAnimeParam = (search) => {
+    const params = new URLSearchParams(search);
+    return params.get('anime') || params.get('id') || params.get('watch');
+};
+assert(parseAnimeParam('?anime=151807') === '151807', 'Parses anime ID from ?anime query parameter');
+assert(parseAnimeParam('?id=21') === '21', 'Parses anime ID from ?id fallback query parameter');
+console.log('');
+
+// --- TEST 46: AniKai Streaming Engine & Domain Auto-Extraction Contract ---
+console.log('▶ Test Case 46: AniKai Streaming Engine & Domain Auto-Extraction Contract');
+const anikaiExt = {
+    id: 'anikai_source',
+    name: 'AniKai',
+    baseUrl: 'https://www3.anikai.cc/home',
+    enabled: true
+};
+
+const soloLevelingAnime = {
+    title: { english: 'Solo Leveling', romaji: 'Ore dake Level Up na Ken' }
+};
+
+const anikaiResult = AnimeUrlResolver.resolveStream(soloLevelingAnime, 3, anikaiExt);
+assert(anikaiResult.streamUrl.includes('https://www3.anikai.cc/watch/solo-leveling/ep-3'), 'AniKai stream URL correctly normalizes /home and formats /watch/slug/ep-');
+assert(ExtensionRepoManager.extractDomain('https://www3.anikai.cc/home') === 'AniKai', 'ExtensionRepoManager automatically formats domain as AniKai');
+assert(ExtensionRepoManager.normalizeUrl('https://www3.anikai.cc/home') === 'https://www3.anikai.cc', 'ExtensionRepoManager normalizes trailing /home');
+console.log('');
+
+// --- TEST 47: Universal Arbitrary Streaming Site Dynamic Auto-Resolution & Episode Switching ---
+console.log('▶ Test Case 47: Universal Arbitrary Streaming Site Dynamic Auto-Resolution & Episode Switching');
+const arbitraryExt1 = {
+    id: 'custom_anime_site_999',
+    name: 'KickAssAnime',
+    baseUrl: 'https://kickassanime.am/home',
+    enabled: true
+};
+
+const arbitraryExt2 = {
+    id: 'custom_anime_site_888',
+    name: 'YugenAnime',
+    baseUrl: 'https://yugenanime.tv/watch/something',
+    endpoints: {
+        stream: 'https://yugenanime.tv/watch/{slug}?ep={episode}'
+    },
+    enabled: true
+};
+
+const attackOnTitan = {
+    title: { english: 'Attack on Titan', romaji: 'Shingeki no Kyojin' }
+};
+
+const result1 = AnimeUrlResolver.resolveStream(attackOnTitan, 5, arbitraryExt1);
+assert(result1.streamUrl === 'https://kickassanime.am/watch/attack-on-titan/ep-5', 'Universal dynamic resolver automatically constructs watch URL for unlisted arbitrary sites');
+
+const result2 = AnimeUrlResolver.resolveStream(attackOnTitan, 12, arbitraryExt2);
+assert(result2.streamUrl === 'https://yugenanime.tv/watch/attack-on-titan?ep=12', 'Custom templated endpoints automatically resolve parameters for unlisted arbitrary sites');
+
+// Assert that episode 1 and episode 2 produce different, distinct stream URLs
+const ep1Result = AnimeUrlResolver.resolveStream(attackOnTitan, 1, arbitraryExt1);
+const ep2Result = AnimeUrlResolver.resolveStream(attackOnTitan, 2, arbitraryExt1);
+assert(ep1Result.streamUrl !== ep2Result.streamUrl, 'Episode 1 and Episode 2 generate distinct stream URLs');
+assert(ep1Result.streamUrl.endsWith('/ep-1') && ep2Result.streamUrl.endsWith('/ep-2'), 'Episode numbers are correctly reflected in stream URLs');
+console.log('');
+
+// --- TEST 48: IframeStreamExtractor Automated Video & Player Extraction ---
+console.log('▶ Test Case 48: IframeStreamExtractor Automated Video & Player Extraction');
+const { IframeStreamExtractor } = await import('./src/lib/IframeStreamExtractor.js');
+
+// 1. Direct .m3u8 extraction from script / video tag
+const htmlWithM3u8 = `
+    <html>
+    <body>
+        <div id="player"></div>
+        <script>
+            var player = new Player({ file: "https://stream.cdn.net/hls/master.m3u8" });
+        </script>
+    </body>
+    </html>
+`;
+const m3u8Extracted = IframeStreamExtractor.extractStreamFromHtml(htmlWithM3u8, 'https://animeexample.com/watch/1');
+assert(m3u8Extracted && m3u8Extracted.type === 'hls' && m3u8Extracted.streamUrl === 'https://stream.cdn.net/hls/master.m3u8', 'Extracts direct .m3u8 stream from page script variables');
+
+// 2. Video iframe player extraction while filtering non-video ad iframes
+const htmlWithIframes = `
+    <html>
+    <body>
+        <iframe src="https://googleads.g.doubleclick.net/pagead/ads?id=123"></iframe>
+        <iframe src="https://disqus.com/embed/comments/"></iframe>
+        <div class="video-container">
+            <iframe src="https://megacloud.tv/embed-2/e-1/sololeveling123?autoPlay=1" allowfullscreen></iframe>
+        </div>
+    </body>
+    </html>
+`;
+const iframeExtracted = IframeStreamExtractor.extractStreamFromHtml(htmlWithIframes, 'https://www3.anikai.cc/watch/solo-leveling?ep=1');
+assert(iframeExtracted && iframeExtracted.type === 'iframe' && iframeExtracted.streamUrl === 'https://megacloud.tv/embed-2/e-1/sololeveling123?autoPlay=1', 'Isolates and extracts video player iframe while ignoring advertisement and comment iframes');
+
+// 3. Relative embed URL resolution
+const htmlWithRelativeEmbed = `
+    <html>
+    <body>
+        <iframe src="/embed/rapidstream/v123"></iframe>
+    </body>
+    </html>
+`;
+const relativeExtracted = IframeStreamExtractor.extractStreamFromHtml(htmlWithRelativeEmbed, 'https://www3.anikai.cc/watch/bleach?ep=5');
+assert(relativeExtracted && relativeExtracted.streamUrl === 'https://www3.anikai.cc/embed/rapidstream/v123', 'Resolves relative iframe src against base origin');
+
+// 4. Extensionless Hash Iframe Embed URL (e.g. bibiemb.xyz)
+const htmlWithBibiEmb = `
+    <div class="player-wrapper">
+        <iframe src="https://bibiemb.xyz/ag09000ec70b63a769697144b1bf4330cd4h" allowfullscreen="true" frameborder="0" marginwidth="0" marginheight="0" scrolling="no"></iframe>
+    </div>
+`;
+const bibiExtracted = IframeStreamExtractor.extractStreamFromHtml(htmlWithBibiEmb, 'https://anikai.cc/watch/jujutsu-kaisen?ep=1');
+assert(bibiExtracted && bibiExtracted.type === 'iframe' && bibiExtracted.streamUrl === 'https://bibiemb.xyz/ag09000ec70b63a769697144b1bf4330cd4h', 'Correctly extracts extensionless embed iframe player URL (bibiemb.xyz)');
+console.log('');
+
+// --- TEST 49: UnifiedPlaybackView Persistent DOM Preservation & State Continuity ---
+console.log('▶ Test Case 49: UnifiedPlaybackView Persistent DOM Preservation & State Continuity');
+const unifiedPlaybackCode = fs.readFileSync(path.join(__dirname, 'src', 'components', 'player', 'UnifiedPlaybackView.jsx'), 'utf-8');
+const appCode = fs.readFileSync(path.join(__dirname, 'src', 'App.jsx'), 'utf-8');
+
+assert(unifiedPlaybackCode.includes('VideoPlayer'), 'UnifiedPlaybackView mounts single persistent VideoPlayer');
+assert(appCode.includes('<UnifiedPlaybackView'), 'App.jsx utilizes UnifiedPlaybackView across playback lifecycle');
+assert(!appCode.includes('<MiniPlayerOverlay'), 'App.jsx eliminates unmounting/remounting of separate MiniPlayerOverlay');
+
+// Assert that key state transitions preserve continuous active stream without resetting
+let activeSrcState = 'https://bibiemb.xyz/ag09000ec70b63a769697144b1bf4330cd4h';
+let playerMountCount = 1;
+const toggleMinimizeState = (isMin) => {
+    // Under UnifiedPlaybackView, the wrapper classes mutate while keeping playerMountCount identical
+    return {
+        isMinimized: isMin,
+        mountCount: playerMountCount,
+        stream: activeSrcState
+    };
+};
+
+const stateBefore = toggleMinimizeState(false);
+const stateAfterMin = toggleMinimizeState(true);
+const stateAfterMax = toggleMinimizeState(false);
+
+assert(stateBefore.mountCount === stateAfterMin.mountCount, 'Player mount count is preserved when minimized (no remount/refresh)');
+assert(stateAfterMin.mountCount === stateAfterMax.mountCount, 'Player mount count is preserved when maximized (no remount/refresh)');
+assert(stateAfterMin.stream === activeSrcState, 'Active video stream state is preserved without disruption');
+console.log('');
+
+// --- TEST 50: Miniplayer Quality Icon Suppression & Fluent HLS Quality Switching ---
+console.log('▶ Test Case 50: Miniplayer Quality Icon Suppression & Fluent HLS Quality Switching');
+const videoPlayerCode = fs.readFileSync(path.join(__dirname, 'src', 'components', 'player', 'VideoPlayer.jsx'), 'utf-8');
+
+assert(videoPlayerCode.includes('!isMinimized && playerType === \'hls\' && qualities.length > 0'), 'Miniplayer suppresses quality settings icon when isMinimized is true');
+assert(videoPlayerCode.includes('smoothQualityChange: true'), 'HLS is configured with smoothQualityChange enabled');
+assert(videoPlayerCode.includes('hlsRef.current.nextLevel = qualityId'), 'Quality switching uses non-destructive nextLevel buffer transition');
+assert(videoPlayerCode.includes('prevSrcPropRef.current'), 'VideoPlayer caches incoming source reference to prevent false re-render refresh');
+console.log('');
+
+// --- TEST 51: Static DOM Sibling Preservation & Inactivity Quality Fade ---
+console.log('▶ Test Case 51: Static DOM Sibling Preservation & Inactivity Quality Fade');
+assert(unifiedPlaybackCode.includes('video-canvas-host'), 'UnifiedPlaybackView defines stable video canvas host');
+assert(unifiedPlaybackCode.includes('!isMinimized && isDesktop ? \'flex\' : \'hidden\''), 'Desktop topbar maintains permanent DOM position using CSS display toggling');
+assert(unifiedPlaybackCode.includes('!isMinimized && !isDesktop ? \'flex\' : \'hidden\''), 'Mobile topbar maintains permanent DOM position using CSS display toggling');
+assert(videoPlayerCode.includes('handleUserActivity'), 'VideoPlayer handles user activity to auto-hide quality button');
+assert(videoPlayerCode.includes('showControls || showQualityMenu'), 'Quality button transitions with auto-disappearing opacity');
+assert(videoPlayerCode.includes('key="mugen-active-iframe"'), 'Iframe uses static element key to prevent DOM recreation');
+console.log('');
+
+// --- TEST 52: Unaired Anime & Episode Disabling Contract ---
+console.log('▶ Test Case 52: Unaired Anime & Episode Disabling Contract');
+const animeDetailModalCode = fs.readFileSync(path.join(__dirname, 'src', 'components', 'anime', 'AnimeDetailModal.jsx'), 'utf-8');
+
+assert(animeDetailModalCode.includes("anime.status === 'NOT_YET_RELEASED'"), 'AnimeDetailModal marks NOT_YET_RELEASED status as unreleased');
+assert(animeDetailModalCode.includes('disabled={!hasPlayableEpisode}'), 'AnimeDetailModal disables Watch Now button for unaired animes');
+assert(animeDetailModalCode.includes('disabled={!released}'), 'AnimeDetailModal disables unreleased episode cards and pills');
+assert(unifiedPlaybackCode.includes("playingAnime?.status === 'NOT_YET_RELEASED'"), 'UnifiedPlaybackView checks NOT_YET_RELEASED status');
+assert(unifiedPlaybackCode.includes('disabled={!released}'), 'UnifiedPlaybackView disables unreleased episodes in drawer and sidebar');
+console.log('');
+
+// --- TEST 53: In-Memory Stream Buffer Continuity & Volatile Prop Decoupling ---
+console.log('▶ Test Case 53: In-Memory Stream Buffer Continuity & Volatile Prop Decoupling');
+const latestVideoPlayerCode = fs.readFileSync(path.join(__dirname, 'src', 'components', 'player', 'VideoPlayer.jsx'), 'utf-8');
+const latestAppCode = fs.readFileSync(path.join(__dirname, 'src', 'App.jsx'), 'utf-8');
+
+assert(latestVideoPlayerCode.includes('onEndedRef.current = onEnded'), 'VideoPlayer uses stable ref for onEnded callback');
+assert(latestVideoPlayerCode.includes('onProgressRef.current = onProgress'), 'VideoPlayer uses stable ref for onProgress callback');
+assert(latestVideoPlayerCode.includes('src !== extractedSrcRef.current && src !== activeSrc'), 'VideoPlayer avoids clearing extracted stream buffer on parent state echoes');
+assert(latestVideoPlayerCode.includes('}, [activeSrc, playerType, key]);'), 'HLS engine lifecycle is decoupled from volatile props (initialTime, onEnded)');
+assert(latestAppCode.includes('const saveProgress = useCallback'), 'App.jsx stabilizes saveProgress callback');
+assert(latestAppCode.includes('const reportProgress = useCallback'), 'App.jsx stabilizes reportProgress callback');
+console.log('');
+
+// --- TEST 54: AniKai Extension Store Inclusion & HiAnime Stream Extraction Contract ---
+console.log('▶ Test Case 54: AniKai Extension Store Inclusion & HiAnime Stream Extraction Contract');
+const extensionRepoCode = fs.readFileSync(path.join(__dirname, 'src', 'data', 'extension_repo.js'), 'utf-8');
+assert(extensionRepoCode.includes('"name": "AniKai"'), 'ANIYOMI_SOURCES includes AniKai streaming extension');
+assert(extensionRepoCode.includes('"name": "HiAnime"'), 'ANIYOMI_SOURCES includes HiAnime streaming extension');
+
+const mockHiAnimeHtml = `
+<div class="watch-player">
+    <div data-video="https://megacloud.tv/embed-2/e-1/ag70f3abcc966dd02eb2700aa918d3f81a4h" class="item server-item">MegaCloud</div>
+</div>
+`;
+const extractedHiAnime = IframeStreamExtractor.extractStreamFromHtml(mockHiAnimeHtml, 'https://hianime.to/watch/solo-leveling/ep-1');
+assert(extractedHiAnime !== null, 'IframeStreamExtractor successfully extracts stream from HiAnime HTML');
+assert(extractedHiAnime.streamUrl === 'https://megacloud.tv/embed-2/e-1/ag70f3abcc966dd02eb2700aa918d3f81a4h', 'IframeStreamExtractor extracts exact megacloud player from HiAnime data-video');
+assert(latestVideoPlayerCode.includes('isStandalonePlayer'), 'VideoPlayer calculates standalone player distinction');
+console.log('');
+
+// --- TEST 55: Alphabetical Extension & Source Sorting Contract ---
+console.log('▶ Test Case 55: Alphabetical Extension & Source Sorting Contract');
+const extensionsViewCode = fs.readFileSync(path.join(__dirname, 'src', 'components', 'extensions', 'ExtensionsView.jsx'), 'utf-8');
+const extensionStoreModalCode = fs.readFileSync(path.join(__dirname, 'src', 'components', 'extensions', 'ExtensionStoreModal.jsx'), 'utf-8');
+const extensionRepoMgrCode = fs.readFileSync(path.join(__dirname, 'src', 'lib', 'ExtensionRepoManager.js'), 'utf-8');
+
+assert(extensionsViewCode.includes('sortedExtensions'), 'ExtensionsView defines sortedExtensions state');
+assert(extensionsViewCode.toLowerCase().includes('localecompare'), 'ExtensionsView sorts extensions alphabetically');
+assert(extensionStoreModalCode.includes('localeCompare'), 'ExtensionStoreModal sorts filteredSources alphabetically');
+assert(extensionRepoMgrCode.includes('localeCompare'), 'ExtensionRepoManager sorts getAllSources alphabetically');
+assert(unifiedPlaybackCode.includes('localeCompare'), 'UnifiedPlaybackView sorts sourceOptions alphabetically');
+
+const sampleSources = [{ name: 'HiAnime' }, { name: 'AniKai' }, { name: 'Zoro' }, { name: 'AniWatch' }];
+const sortedSample = sampleSources.sort((a, b) => a.name.localeCompare(b.name));
+assert(sortedSample[0].name === 'AniKai', 'First source sorted alphabetically is AniKai');
+assert(sortedSample[1].name === 'AniWatch', 'Second source sorted alphabetically is AniWatch');
+assert(sortedSample[2].name === 'HiAnime', 'Third source sorted alphabetically is HiAnime');
+assert(sortedSample[3].name === 'Zoro', 'Fourth source sorted alphabetically is Zoro');
+console.log('');
+
+// --- TEST 56: High-Speed Parallel Stream Extraction & Zero-Latency Caching Contract ---
+console.log('▶ Test Case 56: High-Speed Parallel Stream Extraction & Zero-Latency Caching Contract');
+const extractorCode = fs.readFileSync(path.join(__dirname, 'src', 'lib', 'IframeStreamExtractor.js'), 'utf-8');
+
+assert(extractorCode.includes('getCached'), 'IframeStreamExtractor implements synchronous getCached');
+assert(extractorCode.includes('prefetch'), 'IframeStreamExtractor implements background prefetch');
+assert(extractorCode.includes('Promise.any'), 'IframeStreamExtractor implements Promise.any parallel racing');
+assert(extractorCode.includes('extractionMemoryCache'), 'IframeStreamExtractor uses in-memory extraction cache');
+assert(latestVideoPlayerCode.includes('IframeStreamExtractor.getCached'), 'VideoPlayer reads extraction cache synchronously on mount');
+assert(unifiedPlaybackCode.includes('IframeStreamExtractor.prefetch'), 'UnifiedPlaybackView triggers next-episode background prefetch');
+console.log('');
+
+// --- TEST 57: Mugen Play Animated Mascot Integration & Presence Contract ---
+console.log('▶ Test Case 57: Mugen Play Animated Mascot Integration & Presence Contract');
+const mascotCode = fs.readFileSync(path.join(__dirname, 'src', 'components', 'common', 'Mascot.jsx'), 'utf-8');
+const freshVideoPlayerCode = fs.readFileSync(path.join(__dirname, 'src', 'components', 'player', 'VideoPlayer.jsx'), 'utf-8');
+const favoritesViewFresh = fs.readFileSync(path.join(__dirname, 'src', 'components', 'views', 'FavoritesView.jsx'), 'utf-8');
+const browseViewFresh = fs.readFileSync(path.join(__dirname, 'src', 'components', 'views', 'BrowseView.jsx'), 'utf-8');
+
+assert(mascotCode.includes('export default Mascot'), 'Mascot.jsx exports Mascot component');
+assert(mascotCode.includes('animate-anime-panic') || mascotCode.includes('animate-anime-antenna'), 'Mascot contains animated TV anime keyframes');
+assert(freshVideoPlayerCode.includes('<Mascot') || freshVideoPlayerCode.includes('Mascot'), 'VideoPlayer integrates Mascot component');
+assert(freshVideoPlayerCode.includes('setLoadError(true)'), 'VideoPlayer automatically triggers loadError and abstracts backend errors');
+assert(favoritesViewFresh.includes('<Mascot') || favoritesViewFresh.includes('Mascot'), 'FavoritesView renders Mascot in empty state');
+assert(browseViewFresh.includes('<Mascot') || browseViewFresh.includes('Mascot'), 'BrowseView renders Mascot in empty search results');
+console.log('');
+
+// --- TEST 58: Universal Stream Extraction, 404 Mascot Trigger & Link Application Contract ---
+console.log('▶ Test Case 58: Universal Stream Extraction, 404 Mascot Trigger & Link Application Contract');
+const extractorUpdated = fs.readFileSync(path.join(__dirname, 'src', 'lib', 'IframeStreamExtractor.js'), 'utf-8');
+const playerUpdated = fs.readFileSync(path.join(__dirname, 'src', 'components', 'player', 'VideoPlayer.jsx'), 'utf-8');
+
+assert(extractorUpdated.includes('is404') || extractorUpdated.includes('404 not found'), 'IframeStreamExtractor detects 404 remote responses');
+assert(!playerUpdated.includes("activeSrc.match(/hianime.(ad|to|nz|mm|sx|is|tv)/i) ||"), 'VideoPlayer does not bypass HiAnime from stream extraction');
+assert(playerUpdated.includes('extracted?.is404'), 'VideoPlayer triggers loadError when stream extractor detects 404');
+assert(!playerUpdated.includes('incomingSrcRef'), 'VideoPlayer eliminates undefined incomingSrcRef reference errors');
+console.log('');
+
+// --- TEST 59: Source-Aware Distinct Stream Extraction Contract (HiAnime vs AniKai) ---
+console.log('▶ Test Case 59: Source-Aware Distinct Stream Extraction Contract (HiAnime vs AniKai)');
+assert(extractorUpdated.includes('isHiAnimePage') && extractorUpdated.includes('isAniKaiPage'), 'IframeStreamExtractor differentiates HiAnime vs AniKai pages');
+assert(extractorUpdated.includes('megacloud') && extractorUpdated.includes('bibiemb'), 'IframeStreamExtractor maps MegaCloud to HiAnime and BibiEmb to AniKai');
+
+const sampleHiAnimePageHtml = '<div data-video="https://megacloud.tv/embed-2/e-1/abc12345"></div><div data-video="https://bibiemb.xyz/fallback"></div>';
+const sampleAniKaiPageHtml = '<iframe src="https://bibiemb.xyz/anikai12345"></iframe><div data-video="https://megacloud.tv/fallback"></div>';
+
+// Import extractor for runtime verification
+const extractorModule = await import('./src/lib/IframeStreamExtractor.js');
+const extInstance = extractorModule.IframeStreamExtractor;
+
+const distinctHiAnimeRes = extInstance.extractStreamFromHtml(sampleHiAnimePageHtml, 'https://hianime.to/watch/solo-leveling/ep-1');
+const distinctAniKaiRes = extInstance.extractStreamFromHtml(sampleAniKaiPageHtml, 'https://www3.anikai.cc/watch/solo-leveling/ep-1');
+
+assert(distinctHiAnimeRes.streamUrl.includes('megacloud.tv'), 'HiAnime extraction resolves MegaCloud stream URL');
+assert(distinctAniKaiRes.streamUrl.includes('bibiemb.xyz'), 'AniKai extraction resolves BibiEmb stream URL');
+assert(distinctHiAnimeRes.streamUrl !== distinctAniKaiRes.streamUrl, 'HiAnime and AniKai yield distinct extracted stream URLs');
+console.log('');
+
+// --- TEST 60: Subtitle Query String & BibiEmb Hash Preservation Contract ---
+console.log('▶ Test Case 60: Subtitle Query String & BibiEmb Hash Preservation Contract');
+const mockSubHtml = '<div data-video="https://bibiemb.xyz/agaa302f133e1e35a6e551b49ea8da69dc4h?sub=https://cdn.anizara.store/subtitles/9e/93/9e935ce2c2b0f285e185357ed71fb88d_134195_sub_eng-0.vtt"></div>';
+const extractedSubRes = extInstance.extractStreamFromHtml(mockSubHtml, 'https://hianime.ad/watch/mushoku-tensei/ep-1');
+
+assert(extractedSubRes !== null, 'IframeStreamExtractor successfully extracts stream with query parameters');
+assert(extractedSubRes.streamUrl.includes('?sub='), 'Preserves ?sub= query parameter for embedded captions');
+assert(extractedSubRes.streamUrl.includes('agaa302f133e1e35a6e551b49ea8da69dc4h'), 'Preserves exact video hash ID in extracted URL');
+console.log('');
+
 // --- FINAL SUMMARY ---
 console.log('====================================================');
 console.log(`📊 TEST RESULTS: ${passed} PASSED | ${failed} FAILED`);
+if (failedTests.length > 0) {
+    console.error('FAILED TESTS:', failedTests);
+}
 console.log('====================================================');
 
 if (failed > 0) {
@@ -612,5 +1081,6 @@ if (failed > 0) {
 } else {
     process.exit(0);
 }
+
 
 

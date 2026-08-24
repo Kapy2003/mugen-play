@@ -22,7 +22,7 @@ const ExtensionStoreModal = ({ isOpen, onClose, onInstall, onOpenAddSource, inst
         return ['all', ...Array.from(langs).sort()];
     }, [allRepoSources]);
 
-    // Filter sources
+    // Filter and sort sources alphabetically
     const filteredSources = useMemo(() => {
         return allRepoSources.filter(source => {
             const matchesQuery = source.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -30,7 +30,7 @@ const ExtensionStoreModal = ({ isOpen, onClose, onInstall, onOpenAddSource, inst
             const matchesLang = selectedLang === 'all' || source.lang === selectedLang;
             const matchesNsfw = showNsfw ? true : !source.nsfw;
             return matchesQuery && matchesLang && matchesNsfw;
-        });
+        }).sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
     }, [allRepoSources, searchQuery, selectedLang, showNsfw]);
 
     const handleTestPing = async (source) => {

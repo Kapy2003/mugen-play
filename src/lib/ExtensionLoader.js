@@ -79,20 +79,23 @@ export const ExtensionLoader = {
         }
 
         // Parse and Build Manifest
+        const cleanBaseUrl = this.sanitizeBaseUrl(trimmedUrl);
+        const domainName = this.extractDomainName(cleanBaseUrl);
+
         if (fetchedData && typeof fetchedData === 'object' && !Array.isArray(fetchedData)) {
             // Case 1: Full Extension Manifest Object
             manifest = {
                 id: fetchedData.id || `url_ext_${Date.now()}`,
-                name: customName || fetchedData.name || this.extractDomainName(trimmedUrl),
+                name: customName || fetchedData.name || domainName,
                 version: fetchedData.version || '1.0.0',
                 icon: fetchedData.icon || 'globe',
-                type: fetchedData.type || 'source',
-                baseUrl: fetchedData.baseUrl || trimmedUrl,
+                type: fetchedData.type || 'stream',
+                baseUrl: fetchedData.baseUrl ? this.sanitizeBaseUrl(fetchedData.baseUrl) : cleanBaseUrl,
                 endpoints: fetchedData.endpoints || {
-                    trending: fetchedData.trendingEndpoint || `${trimmedUrl}/trending`,
-                    search: fetchedData.searchEndpoint || `${trimmedUrl}/search`,
-                    episodes: fetchedData.episodesEndpoint || `${trimmedUrl}/episodes/{id}`,
-                    stream: fetchedData.streamEndpoint || `${trimmedUrl}/stream/{id}`
+                    trending: fetchedData.trendingEndpoint || `${cleanBaseUrl}/trending`,
+                    search: fetchedData.searchEndpoint || `${cleanBaseUrl}/search?keyword={query}`,
+                    episodes: fetchedData.episodesEndpoint || `${cleanBaseUrl}/watch/{slug}?ep={episode}`,
+                    stream: fetchedData.streamEndpoint || `${cleanBaseUrl}/watch/{slug}?ep={episode}`
                 },
                 headers: fetchedData.headers || {},
                 enabled: true,
@@ -100,18 +103,18 @@ export const ExtensionLoader = {
             };
         } else {
             // Case 2: Generic Streaming Site / REST URL fallback auto-configuration
-            const domainName = this.extractDomainName(trimmedUrl);
             manifest = {
                 id: `url_ext_${Date.now()}`,
                 name: customName || domainName,
                 version: '1.0.0',
                 icon: 'globe',
-                type: 'source',
-                baseUrl: trimmedUrl,
+                type: 'stream',
+                baseUrl: cleanBaseUrl,
                 endpoints: {
-                    search: `${trimmedUrl}?search={query}`,
-                    trending: `${trimmedUrl}`,
-                    stream: `${trimmedUrl}`
+                    search: `${cleanBaseUrl}/search?keyword={query}`,
+                    trending: `${cleanBaseUrl}`,
+                    episodes: `${cleanBaseUrl}/watch/{slug}?ep={episode}`,
+                    stream: `${cleanBaseUrl}/watch/{slug}?ep={episode}`
                 },
                 enabled: true,
                 status: 'installed'
@@ -123,12 +126,31 @@ export const ExtensionLoader = {
     },
 
     /**
+     * Sanitizes a URL to a clean base URL without trailing page paths like /home or /index.html
+     */
+    sanitizeBaseUrl(urlStr) {
+        if (!urlStr || typeof urlStr !== 'string') return '';
+        const cleaned = urlStr.trim();
+        try {
+            const parsed = new URL(cleaned);
+            const pathname = parsed.pathname.replace(/\/home\/?$/i, '').replace(/\/index\.html?$/i, '').replace(/\/+$/, '');
+            return `${parsed.origin}${pathname}`;
+        } catch {
+            return cleaned.replace(/\/home\/?$/i, '').replace(/\/index\.html?$/i, '').replace(/\/+$/, '');
+        }
+    },
+
+    /**
      * Extracts readable domain name from a URL string
      */
     extractDomainName(urlStr) {
         try {
             const parsed = new URL(urlStr);
-            const host = parsed.hostname.replace('www.', '');
+            const host = parsed.hostname.replace(/^www\d*\./i, '');
+            if (host.includes('anikai') || host.includes('animekai')) return 'AniKai';
+            if (host.includes('hianime')) return 'HiAnime';
+            if (host.includes('aniwatch')) return 'AniWatch';
+            if (host.includes('gogo') || host.includes('anitaku')) return 'GogoAnime';
             return host.charAt(0).toUpperCase() + host.slice(1);
         } catch {
             return 'Custom Anime Source';

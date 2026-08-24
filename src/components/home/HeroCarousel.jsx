@@ -255,9 +255,11 @@ const HeroCarousel = memo(({ items, onPlay, onInfo }) => {
                             {Number(featured.rating) > 10 ? (Number(featured.rating) / 10).toFixed(1) : Number(featured.rating).toFixed(1)}
                         </span>
                     )}
-                    <span className="px-2 py-0.5 sm:px-3 sm:py-1 bg-black/90 text-white text-[10px] sm:text-xs font-black rounded-full border border-white/20 shadow-sm backdrop-blur-md">
-                        {featured.year || 2024}
-                    </span>
+                    {featured.year && (
+                        <span className="px-2 py-0.5 sm:px-3 sm:py-1 bg-black/90 text-white text-[10px] sm:text-xs font-black rounded-full border border-white/20 shadow-sm backdrop-blur-md">
+                            {featured.year}
+                        </span>
+                    )}
                     {featured.episodes && (
                         <span className="px-2 py-0.5 sm:px-3 sm:py-1 bg-black/90 text-white text-[10px] sm:text-xs font-bold rounded-full border border-white/20 shadow-sm backdrop-blur-md">
                             {featured.episodes} Episodes

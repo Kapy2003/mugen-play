@@ -6,6 +6,21 @@ import { AnimePaheApi } from './AnimePaheApi.js';
  */
 export const AnimeUrlResolver = {
     /**
+     * Known franchise episode counts helper
+     */
+    getKnownEpisodeCount(title) {
+        const titleText = (typeof title === 'string' ? title : (title?.english || title?.romaji || title?.name || '')).toLowerCase();
+        if (titleText.includes('one piece')) return 1150;
+        if (titleText.includes('detective conan') || titleText.includes('case closed')) return 1150;
+        if (titleText.includes('pokemon') || titleText.includes('pocket monster')) return 1200;
+        if (titleText.includes('naruto')) return 500;
+        if (titleText.includes('fairy tail')) return 328;
+        if (titleText.includes('dragon ball z')) return 291;
+        if (titleText.includes('dragon ball super')) return 131;
+        return null;
+    },
+
+    /**
      * Resolves the direct stream URL and episode playlist for the target anime and provider.
      * @param {Object} anime - Anime data object
      * @param {number} episodeNum - Target episode number (defaults to 1)
@@ -48,18 +63,39 @@ export const AnimeUrlResolver = {
                 };
             }
 
-            // Direct HiAnime watch URL e.g. https://hianime.ad/watch/initial-d-first-stage/ep-1
-            const hianimeMatch = anime.url.match(/hianime\.(ad|to|nz|mm|sx)\/watch\/([^/?#]+)(?:\/ep-(\d+))?/i);
+            // Direct HiAnime watch URL
+            const hianimeMatch = anime.url.match(/^(https?:\/\/hianime\.[^/]+)\/watch\/([^/?#]+)(?:\/ep-(\d+))?/i);
             if (hianimeMatch) {
+                const baseOrigin = hianimeMatch[1];
                 const slug = hianimeMatch[2];
-                const targetEp = episodeNum ? ep : (hianimeMatch[3] ? parseInt(hianimeMatch[3], 10) : ep);
+                const targetEp = ep;
                 return {
-                    streamUrl: `https://hianime.ad/watch/${slug}/ep-${targetEp}`,
+                    streamUrl: `${baseOrigin}/watch/${slug}/ep-${targetEp}`,
                     episodesList: Array.from({ length: 26 }, (_, idx) => ({
                         id: `hianime-ep-${idx + 1}`,
                         number: idx + 1,
                         title: `Episode ${idx + 1}`,
-                        url: `https://hianime.ad/watch/${slug}/ep-${idx + 1}`
+                        url: `${baseOrigin}/watch/${slug}/ep-${idx + 1}`
+                    })),
+                    resolvedSlug: slug
+                };
+            }
+
+            // Direct /watch/slug/ep-1 or /watch/slug?ep=1 URL (e.g. AniKai or arbitrary streaming sites)
+            const watchMatch = anime.url.match(/^(https?:\/\/[^/]+)\/watch\/([^/?#]+)(?:\/ep-(\d+)|\?ep=(\d+))?/i);
+            if (watchMatch) {
+                const baseOrigin = watchMatch[1];
+                const slug = watchMatch[2];
+                const targetEp = ep;
+                const isSlashFormat = anime.url.includes('/ep-') || !anime.url.includes('?ep=');
+                const epUrl = isSlashFormat ? `${baseOrigin}/watch/${slug}/ep-${targetEp}` : `${baseOrigin}/watch/${slug}?ep=${targetEp}`;
+                return {
+                    streamUrl: epUrl,
+                    episodesList: Array.from({ length: 24 }, (_, idx) => ({
+                        id: `${slug}-ep-${idx + 1}`,
+                        number: idx + 1,
+                        title: `Episode ${idx + 1}`,
+                        url: isSlashFormat ? `${baseOrigin}/watch/${slug}/ep-${idx + 1}` : `${baseOrigin}/watch/${slug}?ep=${idx + 1}`
                     })),
                     resolvedSlug: slug
                 };
@@ -120,9 +156,15 @@ export const AnimeUrlResolver = {
         if (targetExt && targetExt.enabled !== false) {
             const host = (targetExt.baseUrl || targetExt.url || '').toLowerCase();
             const extId = (targetExt.id || '').toLowerCase();
+            const cleanBase = (targetExt.baseUrl || targetExt.url || '')
+                .replace(/\/home\/?$/i, '')
+                .replace(/\/index\.html?$/i, '')
+                .replace(/\/+$/, '');
 
             if (extId.includes('hianime') || host.includes('hianime')) {
-                streamUrl = `https://hianime.ad/watch/${hianimeSlug}/ep-${ep}`;
+                streamUrl = `${cleanBase}/watch/${hianimeSlug}/ep-${ep}`;
+            } else if (extId.includes('anikai') || host.includes('anikai') || host.includes('animekai')) {
+                streamUrl = `${cleanBase}/watch/${primarySlug}/ep-${ep}`;
             } else if (extId.includes('anikoto') || host.includes('anikoto')) {
                 streamUrl = `https://anikoto.cz/watch/${primarySlug}?ep=${ep}`;
             } else if (extId.includes('animepahe') || host.includes('animepahe')) {
@@ -130,21 +172,20 @@ export const AnimeUrlResolver = {
             } else if (extId.includes('anitaku') || host.includes('anitaku') || host.includes('gogo')) {
                 streamUrl = `https://anitaku.so/streaming.php?id=${gogoSlug}-episode-${ep}`;
             } else if (extId.includes('aniwatch') || host.includes('aniwatch')) {
-                streamUrl = `https://aniwatchtv.to/watch/${primarySlug}?ep=${ep}`;
-            } else if (extId.includes('animekai') || host.includes('animekai')) {
-                streamUrl = `https://animekai.be/watch/${primarySlug}?ep=${ep}`;
+                streamUrl = `https://aniwatchtv.to/watch/${primarySlug}/ep-${ep}`;
             } else if (extId.includes('allanime') || host.includes('allanime')) {
                 streamUrl = `https://allanime.to/watch/${primarySlug}/${ep}`;
             } else if (extId.includes('hanime') || host.includes('hanime')) {
                 streamUrl = `https://playtaku.net/streaming.php?id=${primarySlug}-episode-${ep}`;
-            } else if (targetExt.endpoints?.stream) {
+            } else if (targetExt.endpoints?.stream && (targetExt.endpoints.stream.includes('{slug}') || targetExt.endpoints.stream.includes('{episode}') || targetExt.endpoints.stream.includes('{id}'))) {
                 streamUrl = targetExt.endpoints.stream
                     .replace('{id}', aniId)
                     .replace('{slug}', primarySlug)
                     .replace('{episode}', ep.toString())
                     .replace('{query}', encodeURIComponent(cleanPreferred));
             } else {
-                streamUrl = `${targetExt.baseUrl || 'https://anitaku.so'}/watch/${primarySlug}?ep=${ep}`;
+                // Universal dynamic watch URL for ANY user-added anime streaming website
+                streamUrl = `${cleanBase}/watch/${primarySlug}/ep-${ep}`;
             }
         } else {
             // No video streaming extension is installed / selected
@@ -153,27 +194,16 @@ export const AnimeUrlResolver = {
 
         // 4. Generate Simple Episode Playlist
         let totalEpisodes = parseInt(anime?.episodes || anime?.totalEpisodes, 10);
-        const titleText = (typeof anime?.title === 'string' ? anime.title : (anime?.title?.english || anime?.title?.romaji || anime?.name || '')).toLowerCase();
+        const knownCount = this.getKnownEpisodeCount(anime?.title || anime?.name);
         
-        if (titleText.includes('one piece')) {
-            totalEpisodes = Math.max(totalEpisodes || 0, 1150);
-        } else if (titleText.includes('detective conan') || titleText.includes('case closed')) {
-            totalEpisodes = Math.max(totalEpisodes || 0, 1150);
-        } else if (titleText.includes('pokemon') || titleText.includes('pocket monster')) {
-            totalEpisodes = Math.max(totalEpisodes || 0, 1200);
-        } else if (titleText.includes('naruto')) {
-            totalEpisodes = Math.max(totalEpisodes || 0, 500);
-        } else if (titleText.includes('fairy tail')) {
-            totalEpisodes = Math.max(totalEpisodes || 0, 328);
-        } else if (titleText.includes('dragon ball z')) {
-            totalEpisodes = Math.max(totalEpisodes || 0, 291);
-        } else if (titleText.includes('dragon ball super')) {
-            totalEpisodes = Math.max(totalEpisodes || 0, 131);
+        if (knownCount) {
+            totalEpisodes = Math.max(totalEpisodes || 0, knownCount);
         } else if (anime?.nextAiringEpisode?.episode) {
             totalEpisodes = Math.max(anime.nextAiringEpisode.episode - 1, totalEpisodes || 24);
         } else if (!totalEpisodes) {
             totalEpisodes = 24;
         }
+
         let episodesList = anime?.episodesList;
         if (!Array.isArray(episodesList) || episodesList.length === 0) {
             episodesList = Array.from({ length: totalEpisodes }, (_, idx) => {
@@ -182,7 +212,11 @@ export const AnimeUrlResolver = {
                     id: `${primarySlug}-ep-${epNumber}`,
                     number: epNumber,
                     title: `Episode ${epNumber}`,
-                    url: streamUrl.replace(`episode-${ep}`, `episode-${epNumber}`).replace(`?ep=${ep}`, `?ep=${epNumber}`).replace(`/${ep}`, `/${epNumber}`)
+                    url: streamUrl
+                        .replace(new RegExp(`ep-${ep}(?=[^0-9]|$)`, 'i'), `ep-${epNumber}`)
+                        .replace(new RegExp(`episode-${ep}(?=[^0-9]|$)`, 'i'), `episode-${epNumber}`)
+                        .replace(new RegExp(`\\?ep=${ep}(?=[^0-9]|$)`, 'i'), `?ep=${epNumber}`)
+                        .replace(new RegExp(`/${ep}(?=[^0-9]|$)`, 'i'), `/${epNumber}`)
                 };
             });
         }
@@ -258,5 +292,9 @@ export const AnimeUrlResolver = {
             .replace(/\s+/g, '-')
             .replace(/-+/g, '-')
             .replace(/^-|-$/g, '');
+    },
+
+    generateSlug(str) {
+        return this.toSlug(str);
     }
 };
