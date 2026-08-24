@@ -1,4 +1,4 @@
-import { useRef, memo } from 'react';
+import { useRef, memo, useCallback } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 const HorizontalScrollList = memo(({ title, icon: Icon, items, onItemClick, renderItem }) => {
@@ -6,20 +6,23 @@ const HorizontalScrollList = memo(({ title, icon: Icon, items, onItemClick, rend
     const dragRef = useRef({
         isDragging: false,
         startX: 0,
+        startY: 0,
         scrollLeft: 0,
         hasMoved: false
     });
 
-    const scroll = (direction) => {
+    const scroll = useCallback((direction) => {
         if (scrollRef.current) {
             const { current } = scrollRef;
-            const scrollAmount = direction === 'left' ? -350 : 350;
+            const scrollAmount = direction === 'left' ? -380 : 380;
             current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
         }
-    };
+    }, []);
 
+    // Desktop Mouse Drag Only (Touch devices use 100% pure native kinetic momentum scroll)
     const handleMouseDown = (e) => {
         if (!scrollRef.current) return;
+        if (e.target.closest('button')) return;
         dragRef.current = {
             isDragging: true,
             startX: e.pageX - scrollRef.current.offsetLeft,
@@ -34,10 +37,12 @@ const HorizontalScrollList = memo(({ title, icon: Icon, items, onItemClick, rend
     };
 
     const handleMouseUp = () => {
-        setTimeout(() => {
-            dragRef.current.isDragging = false;
-            dragRef.current.hasMoved = false;
-        }, 50);
+        if (dragRef.current.isDragging) {
+            setTimeout(() => {
+                dragRef.current.isDragging = false;
+                dragRef.current.hasMoved = false;
+            }, 50);
+        }
     };
 
     const handleMouseMove = (e) => {
@@ -46,7 +51,7 @@ const HorizontalScrollList = memo(({ title, icon: Icon, items, onItemClick, rend
         const dx = currentX - dragRef.current.startX;
         const dy = e.pageY - dragRef.current.startY;
 
-        // If user movement is predominantly vertical, release drag so page scrolls smoothly
+        // If user movement is vertical, release mouse drag
         if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 8) {
             dragRef.current.isDragging = false;
             return;
@@ -76,11 +81,12 @@ const HorizontalScrollList = memo(({ title, icon: Icon, items, onItemClick, rend
                 </h2>
 
                 {/* Navigation Buttons (Desktop) */}
-                <div className="hidden sm:flex gap-1.5 opacity-0 group-hover/section:opacity-100 transition-opacity">
+                <div className="hidden sm:flex gap-1.5 opacity-0 group-hover/section:opacity-100 transition-opacity duration-200">
                     <button
                         onClick={() => scroll('left')}
                         className="p-1.5 bg-gray-800 hover:bg-gray-700 text-white rounded-full transition-colors cursor-pointer"
                         aria-label="Scroll Left"
+                        title="Scroll Left"
                     >
                         <ChevronLeft className="w-4 h-4" />
                     </button>
@@ -88,6 +94,7 @@ const HorizontalScrollList = memo(({ title, icon: Icon, items, onItemClick, rend
                         onClick={() => scroll('right')}
                         className="p-1.5 bg-gray-800 hover:bg-gray-700 text-white rounded-full transition-colors cursor-pointer"
                         aria-label="Scroll Right"
+                        title="Scroll Right"
                     >
                         <ChevronRight className="w-4 h-4" />
                     </button>
@@ -112,7 +119,7 @@ const HorizontalScrollList = memo(({ title, icon: Icon, items, onItemClick, rend
                     >
                         {renderItem ? renderItem(item) : (
                             <div className="w-[130px] sm:w-[160px] group relative cursor-pointer">
-                                <div className="aspect-[2/3] rounded-xl overflow-hidden mb-2 relative bg-gray-900 border border-gray-800">
+                                <div className="aspect-[2/3] rounded-xl overflow-hidden mb-2 relative bg-gray-900 border border-gray-800 shadow-md">
                                     <img
                                         src={item.coverUrl || item.image || item.poster || ''}
                                         alt={getTitle(item)}
@@ -121,7 +128,7 @@ const HorizontalScrollList = memo(({ title, icon: Icon, items, onItemClick, rend
                                         className="w-full h-full object-cover pointer-events-none group-hover:scale-105 transition-transform duration-300"
                                     />
                                 </div>
-                                <h3 className="text-xs sm:text-sm font-medium text-white truncate">{getTitle(item)}</h3>
+                                <h3 className="text-xs sm:text-sm font-medium text-white truncate group-hover:text-red-500 transition-colors">{getTitle(item)}</h3>
                             </div>
                         )}
                     </div>

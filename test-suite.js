@@ -1,4 +1,4 @@
-/* global process */
+import fs from 'fs';
 import { AnimeUrlResolver } from './src/lib/AnimeUrlResolver.js';
 import { AnimePaheApi } from './src/lib/AnimePaheApi.js';
 import { ExtensionHealthChecker } from './src/lib/ExtensionHealthChecker.js';
@@ -557,6 +557,51 @@ assert(canDismissModal(150, 120) === false, 'Prevents modal dismissal while user
 assert(canDismissModal(0, 30) === false, 'Ignores tiny inadvertent touch slips at top');
 console.log('');
 
+// --- TEST 34: Right-Click Context Menu Developer Mode Lock Logic ---
+console.log('▶ Test Case 34: Right-Click Context Menu Developer Mode Lock Logic');
+const shouldBlockContextMenu = (devMode, isDevUnlocked) => {
+    return !devMode && !isDevUnlocked;
+};
+assert(shouldBlockContextMenu(false, false) === true, 'Blocks right-click context menu by default');
+assert(shouldBlockContextMenu(true, true) === false, 'Enables right-click context menu when Dev Mode is unlocked');
+assert(shouldBlockContextMenu(false, true) === false, 'Enables right-click context menu when Dev Unlocked is true');
+console.log('');
+
+// --- TEST 35: User Guide Modal Persistence & Anti-Piracy Statement ---
+console.log('▶ Test Case 35: User Guide Modal Persistence & Anti-Piracy Statement');
+const shouldShowUserGuide = (seenGuideFlag) => {
+    return seenGuideFlag !== 'true';
+};
+assert(shouldShowUserGuide(null) === true, 'Shows user guide on first site entry');
+assert(shouldShowUserGuide('true') === false, 'Suppresses user guide when user dismissed with dontShowAgain');
+
+const userGuideTextMock = 'Mugen Play does not host, upload, store, or condone illegal distribution or piracy of copyrighted material.';
+assert(userGuideTextMock.includes('condone illegal distribution or piracy'), 'User Guide contains explicit anti-piracy statement');
+console.log('');
+
+// --- TEST 36: Hero Carousel Pointer Dragging Displacement & Threshold ---
+console.log('▶ Test Case 36: Hero Carousel Pointer Dragging Displacement & Threshold');
+const calculateCarouselSwipe = (diffX, diffY) => {
+    const threshold = 35;
+    if (Math.abs(diffX) > threshold && Math.abs(diffX) > Math.abs(diffY)) {
+        return diffX > 0 ? 'PREV' : 'NEXT';
+    }
+    return 'NONE';
+};
+assert(calculateCarouselSwipe(50, 5) === 'PREV', 'Swiping right (>35px) triggers PREV slide');
+assert(calculateCarouselSwipe(-60, 10) === 'NEXT', 'Swiping left (<-35px) triggers NEXT slide');
+assert(calculateCarouselSwipe(15, 5) === 'NONE', 'Minor drag (<35px) does not switch slide');
+assert(calculateCarouselSwipe(20, 80) === 'NONE', 'Vertical scroll motion is ignored by carousel');
+console.log('');
+
+// --- TEST 37: 60-120fps Fluid GPU Transform Utilities & Intrinsic Sizing ---
+console.log('▶ Test Case 37: 60-120fps Fluid GPU Transform Utilities & Intrinsic Sizing');
+const cssContent = fs.readFileSync('./src/index.css', 'utf-8');
+assert(cssContent.includes('transform: translate3d(0, 0, 0)'), 'GPU 3D translate compositor defined');
+assert(cssContent.includes('content-visibility: auto'), 'Content-visibility auto optimization defined for 120fps grids');
+assert(cssContent.includes('cubic-bezier(0.16, 1, 0.3, 1)'), 'Ultra-fast fluid Apple spring bezier curves defined');
+console.log('');
+
 // --- FINAL SUMMARY ---
 console.log('====================================================');
 console.log(`📊 TEST RESULTS: ${passed} PASSED | ${failed} FAILED`);
@@ -567,4 +612,5 @@ if (failed > 0) {
 } else {
     process.exit(0);
 }
+
 

@@ -19,7 +19,7 @@ const AnimeCard = memo(({ anime, onClick }) => {
 
     return (
         <div
-            className="group relative rounded-2xl overflow-hidden cursor-pointer bg-gray-900 border border-gray-800 transition-transform duration-200 hover:scale-[1.02] hover:shadow-xl"
+            className="group relative rounded-2xl overflow-hidden cursor-pointer bg-gray-900 border border-gray-800/80 fluid-card-lift transform-gpu shadow-md hover:border-red-500/30 hover:shadow-2xl hover:shadow-red-950/20 active-press select-none"
             onClick={() => onClick && onClick(anime)}
         >
             <div className="relative aspect-[2/3] overflow-hidden bg-gray-800">
@@ -30,7 +30,7 @@ const AnimeCard = memo(({ anime, onClick }) => {
                         loading="lazy"
                         decoding="async"
                         draggable="false"
-                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 pointer-events-none select-none"
+                        className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105 pointer-events-none select-none"
                     />
                 ) : (
                     <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">

@@ -51,7 +51,7 @@ const SplashScreen = ({ onComplete }) => {
     return (
         <div
             onClick={handleDismiss}
-            className={`fixed inset-0 z-[100] flex flex-col items-center justify-center transition-opacity duration-300 ease-out cursor-pointer select-none ${
+            className={`fixed inset-0 z-[999] flex flex-col items-center justify-center transition-opacity duration-300 ease-out cursor-pointer select-none ${
                 isLight ? 'bg-[#f8fafc]' : 'bg-[#08080a]'
             }`}
             style={{ opacity: opacity / 100 }}
