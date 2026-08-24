@@ -274,14 +274,30 @@ export const IframeStreamExtractor = {
             return json.contents;
         };
 
+        const isBrowser = typeof window !== 'undefined' && Boolean(window.location?.origin);
+        let isSameOrigin = false;
+        if (isBrowser) {
+            try {
+                isSameOrigin = new URL(pageUrl).origin === window.location.origin;
+            } catch {
+                isSameOrigin = false;
+            }
+        }
+
+        const fetchCandidates = [
+            makeCorsProxy(),
+            makeAllOriginsRaw(),
+            makeCodeTabs(),
+            makeAllOriginsGet()
+        ];
+
+        // Direct fetch without CORS proxy is only feasible in Node/SSR/Electron or same-origin contexts
+        if (!isBrowser || isSameOrigin) {
+            fetchCandidates.unshift(makeDirectFetch());
+        }
+
         try {
-            const winningHtml = await Promise.any([
-                makeDirectFetch(),
-                makeCodeTabs(),
-                makeCorsProxy(),
-                makeAllOriginsRaw(),
-                makeAllOriginsGet()
-            ]);
+            const winningHtml = await Promise.any(fetchCandidates);
             clearTimeout(timeoutId);
             try { controller.abort(); } catch {} // Immediately terminate losing proxy streams
 

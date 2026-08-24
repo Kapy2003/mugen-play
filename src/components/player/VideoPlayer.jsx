@@ -184,6 +184,13 @@ const VideoPlayer = ({
                     if (onUpdateStreamUrl) {
                         onUpdateStreamUrl(extracted.streamUrl);
                     }
+                } else if (!extracted) {
+                    // If extraction returned no video candidate, check if page is unplayable/unreleased
+                    const isWatchUrl = Boolean(activeSrc && (activeSrc.includes('/watch/') || activeSrc.includes('streaming.php') || activeSrc.includes('/play/')));
+                    if (isWatchUrl && (activeSrc.includes('season-3') || activeSrc.includes('season-4') || activeSrc.includes('upcoming'))) {
+                        console.warn('[VideoPlayer] No playable stream found on unreleased title, triggering mascot fallback');
+                        setLoadError(true);
+                    }
                 }
             } catch (err) {
                 console.warn('[VideoPlayer] Stream extraction error:', err);
