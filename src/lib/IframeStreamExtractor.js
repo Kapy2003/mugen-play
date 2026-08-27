@@ -44,11 +44,8 @@ const saveToCache = (pageUrl, data) => {
     extractionMemoryCache.set(pageUrl, data);
     try {
         if (typeof localStorage !== 'undefined') {
-            const obj = {};
-            // Keep the latest 100 extracted streams in local storage
             const entries = Array.from(extractionMemoryCache.entries()).slice(-100);
-            entries.forEach(([k, v]) => { obj[k] = v; });
-            localStorage.setItem(CACHE_STORAGE_KEY, JSON.stringify(obj));
+            localStorage.setItem(CACHE_STORAGE_KEY, JSON.stringify(Object.fromEntries(entries)));
         }
     } catch {
         // ignore safely

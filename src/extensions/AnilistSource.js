@@ -43,7 +43,8 @@ export class AnilistSource extends UniversalExtension {
     mapAnime(media, matched = null) {
         const titleStr = media.title?.english || media.title?.romaji || media.title?.native || (typeof media.title === 'string' ? media.title : 'Anime');
         const knownCount = AnimeUrlResolver.getKnownEpisodeCount(titleStr);
-        const totalCount = media.episodes || knownCount || (media.status === 'RELEASING' ? 24 : 12);
+        const liveAiredCount = media.nextAiringEpisode?.episode ? (media.nextAiringEpisode.episode - 1) : null;
+        const totalCount = media.episodes || liveAiredCount || knownCount || (media.status === 'RELEASING' ? 24 : 12);
 
         const episodesList = [];
         const cleanBaseSlug = AnimeUrlResolver.generateSlug(titleStr);

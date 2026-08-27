@@ -13,34 +13,38 @@ export const EpisodeMetadataService = {
     /**
      * Resilient fetcher supporting direct & multi-proxy fallbacks for CORS
      */
-    async fetchWithProxyFallback(targetUrl, timeoutMs = 4500) {
-        const PROXIES = [
+    async fetchWithProxyFallback(targetUrl, timeoutMs = 3500) {
+        const PROXY_BUILDERS = [
             (url) => url,
-            (url) => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
             (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-            (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`
+            (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+            (url) => `https://corsproxy.io/?url=${encodeURIComponent(url)}`
         ];
 
-        for (const proxyFn of PROXIES) {
-            try {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+        try {
+            const promises = PROXY_BUILDERS.map(async (proxyFn) => {
                 const proxied = proxyFn(targetUrl);
                 const res = await fetch(proxied, {
                     signal: controller.signal,
-                    headers: { 'Accept': 'application/vnd.api+json' }
+                    headers: { 'Accept': 'application/vnd.api+json, application/json' }
                 });
-                clearTimeout(timeoutId);
+                if (!res.ok) throw new Error(`Proxy ${res.status}`);
+                const data = await res.json();
+                if (!data) throw new Error('Empty JSON');
+                return data;
+            });
 
-                if (res && res.ok) {
-                    const data = await res.json();
-                    if (data) return data;
-                }
-            } catch (err) { // eslint-disable-line no-unused-vars
-                continue;
-            }
+            const winningData = await Promise.any(promises);
+            clearTimeout(timeoutId);
+            try { controller.abort(); } catch {}
+            return winningData;
+        } catch {
+            clearTimeout(timeoutId);
+            return null;
         }
-        return null;
     },
 
     /**
@@ -115,6 +119,34 @@ export const EpisodeMetadataService = {
     },
 
     /**
+     * Fetch enriched episode titles from Jikan (MyAnimeList API)
+     * @param {string|number} malId - MyAnimeList Anime ID
+     * @param {number} page - Page number (1-indexed, 100 eps per page)
+     * @returns {Promise<Array<Object>>}
+     */
+    async fetchJikanEpisodes(malId, page = 1) {
+        if (!malId) return [];
+        const cacheKey = `jikan_eps_${malId}_${page}`;
+        if (this.cache.has(cacheKey)) return this.cache.get(cacheKey);
+
+        const url = `https://api.jikan.moe/v4/anime/${malId}/episodes?page=${page}`;
+        const data = await this.fetchWithProxyFallback(url);
+
+        if (Array.isArray(data?.data) && data.data.length > 0) {
+            const mapped = data.data.map(item => ({
+                number: item.mal_id,
+                title: item.title && !item.title.match(/^episode\s*\d+$/i) ? item.title : `Episode ${item.mal_id}`,
+                romajiTitle: item.title_romanji || '',
+                airDate: item.aired || null,
+                score: item.score || null
+            }));
+            this.cache.set(cacheKey, mapped);
+            return mapped;
+        }
+        return [];
+    },
+
+    /**
      * Enriches an anime's full episode playlist with specific titles, screencaps, and descriptions
      * @param {Object} anime - The anime object containing title, bannerUrl, episodesList, etc.
      * @param {number} maxEpisodes - Maximum episodes to fetch (default: 1200)
@@ -125,88 +157,156 @@ export const EpisodeMetadataService = {
         const animeTitle = anime.title?.english || anime.title?.romaji || (typeof anime.title === 'string' ? anime.title : '') || anime.name || '';
         if (!animeTitle) return null;
 
-        const totalEpisodes = anime.episodes || anime.episodesList?.length || 24;
-        const kitsuId = await this.searchKitsuAnimeId(animeTitle);
+        const isOnePiece = animeTitle.toLowerCase().includes('one piece');
+        const totalEpisodes = anime.episodes || anime.episodesList?.length || (isOnePiece ? 1200 : 24);
+        const targetEpisode = anime.currentEpisode || 1;
+        const kitsuId = isOnePiece ? '12' : await this.searchKitsuAnimeId(animeTitle);
         const allFetchedEpisodes = [];
 
+        const startOffset = Math.max(0, Math.floor((targetEpisode - 1) / 100) * 100);
+
+        // 1. Fetch from Kitsu (up to 100 episodes centered around target episode)
         if (kitsuId) {
-            const totalToFetch = Math.min(totalEpisodes, maxEpisodes);
+            const totalToFetch = Math.min(totalEpisodes - startOffset, 100);
             const pages = Math.ceil(totalToFetch / 20);
 
-            // Fetch in concurrent chunks of 5 pages (100 episodes per batch)
-            for (let i = 0; i < pages; i += 5) {
-                const batchPromises = [];
-                for (let j = i; j < Math.min(i + 5, pages); j++) {
-                    batchPromises.push(this.fetchKitsuEpisodes(kitsuId, j * 20, 20));
-                }
-                const batchResults = await Promise.all(batchPromises);
-                allFetchedEpisodes.push(...batchResults.flat());
+            const batchPromises = [];
+            for (let j = 0; j < pages; j++) {
+                batchPromises.push(this.fetchKitsuEpisodes(kitsuId, startOffset + (j * 20), 20));
             }
+            const batchResults = await Promise.all(batchPromises);
+            allFetchedEpisodes.push(...batchResults.flat());
         }
 
-        // If Kitsu didn't have episodes, fallback to TMDB via ConsumetService
-        if (allFetchedEpisodes.length === 0) {
+        // 2. Fetch official titles from Jikan (MyAnimeList API) for One Piece or if Kitsu missing titles
+        const malId = isOnePiece ? 21 : anime.idMal;
+        let jikanEpisodes = [];
+        if (malId) {
+            try {
+                const jikanPage = Math.floor(startOffset / 100) + 1;
+                const jikanResults = await this.fetchJikanEpisodes(malId, jikanPage);
+                jikanEpisodes = jikanResults || [];
+            } catch {}
+        }
+
+        // 3. Fallback to TMDB via ConsumetService if both Kitsu & Jikan empty
+        if (allFetchedEpisodes.length === 0 && jikanEpisodes.length === 0) {
             if (anime.id) {
                 try {
                     const consumetData = await ConsumetService.fetchAnimeInfo(anime.id);
                     if (consumetData?.episodes?.length > 0) {
                         return ConsumetService.mapEpisodes(consumetData.episodes, anime);
                     }
-                } catch (e) { // eslint-disable-line no-unused-vars
-                }
+                } catch {}
             }
             return null;
         }
 
-        const epMap = new Map();
+        const kitsuMap = new Map();
         allFetchedEpisodes.forEach(ep => {
-            if (ep.number) epMap.set(ep.number, ep);
+            if (ep.number) kitsuMap.set(ep.number, ep);
         });
 
-        const dynamicTotal = Math.max(totalEpisodes, allFetchedEpisodes.length);
+        const jikanMap = new Map();
+        jikanEpisodes.forEach(ep => {
+            if (ep.number) jikanMap.set(ep.number, ep);
+        });
+
+        const dynamicTotal = Math.max(totalEpisodes, allFetchedEpisodes.length, jikanEpisodes.length);
         const fallbackThumb = anime.bannerUrl || anime.coverUrl;
         const baseList = anime.episodesList && anime.episodesList.length >= dynamicTotal
             ? anime.episodesList
             : Array.from({ length: dynamicTotal }, (_, idx) => ({ number: idx + 1, title: `Episode ${idx + 1}` }));
 
-        const enrichedList = baseList.map(baseEp => {
+        return baseList.map(baseEp => {
             const epNum = baseEp.number;
-            const fetched = epMap.get(epNum);
+            const kitsu = kitsuMap.get(epNum);
+            const jikan = jikanMap.get(epNum);
 
-            if (fetched) {
-                return {
-                    ...baseEp,
-                    number: epNum,
-                    title: fetched.title,
-                    fullTitle: fetched.fullTitle,
-                    thumbnail: fetched.thumbnail || baseEp.thumbnail || fallbackThumb,
-                    description: fetched.description || baseEp.description || '',
-                    airDate: fetched.airDate || baseEp.airDate || null
-                };
+            let bestTitle = `Episode ${epNum}`;
+            if (kitsu?.title && !kitsu.title.match(/^episode\s*\d+$/i)) {
+                bestTitle = kitsu.title;
+            } else if (jikan?.title && !jikan.title.match(/^episode\s*\d+$/i)) {
+                bestTitle = jikan.title;
+            } else if (baseEp.title && !baseEp.title.match(/^episode\s*\d+$/i)) {
+                bestTitle = baseEp.title;
             }
 
             return {
                 ...baseEp,
-                thumbnail: baseEp.thumbnail || fallbackThumb
+                number: epNum,
+                title: bestTitle,
+                fullTitle: `Episode ${epNum}: ${bestTitle}`,
+                thumbnail: kitsu?.thumbnail || baseEp.thumbnail || fallbackThumb,
+                description: kitsu?.description || baseEp.description || '',
+                airDate: kitsu?.airDate || jikan?.airDate || baseEp.airDate || null
             };
         });
-
-        return enrichedList;
     },
 
     /**
      * On-demand slice enrichment when navigating pagination or jumping to an episode
+     * Fetches up to `count` episodes from Kitsu / Jikan starting from `startEpisodeNum`
      */
-    async enrichAnimeSlice(anime, targetEpisodeNum, count = 24) {
-        if (!anime || !targetEpisodeNum) return null;
+    async enrichAnimeSlice(anime, startEpisodeNum = 1, count = 100) {
+        if (!anime || !startEpisodeNum) return null;
         const animeTitle = anime.title?.english || anime.title?.romaji || (typeof anime.title === 'string' ? anime.title : '') || anime.name || '';
         if (!animeTitle) return null;
 
-        const kitsuId = await this.searchKitsuAnimeId(animeTitle);
-        if (!kitsuId) return null;
+        const isOnePiece = animeTitle.toLowerCase().includes('one piece');
+        const kitsuId = isOnePiece ? '12' : await this.searchKitsuAnimeId(animeTitle);
+        const offset = Math.max(0, startEpisodeNum - 1);
+        const pages = Math.ceil(count / 20);
 
-        const offset = Math.max(0, targetEpisodeNum - 1);
-        const fetched = await this.fetchKitsuEpisodes(kitsuId, offset, count);
-        return fetched;
+        const batchPromises = [];
+        if (kitsuId) {
+            for (let i = 0; i < pages; i++) {
+                batchPromises.push(this.fetchKitsuEpisodes(kitsuId, offset + (i * 20), 20));
+            }
+        }
+
+        // Also fetch Jikan page corresponding to this range
+        const malId = isOnePiece ? 21 : anime.idMal;
+        const jikanPage = Math.floor(offset / 100) + 1;
+        let jikanPromise = null;
+        if (malId) {
+            jikanPromise = this.fetchJikanEpisodes(malId, jikanPage).catch(() => []);
+        }
+
+        const [kitsuResults, jikanResults] = await Promise.all([
+            Promise.all(batchPromises).then(r => r.flat()),
+            jikanPromise || Promise.resolve([])
+        ]);
+
+        const kitsuMap = new Map((kitsuResults || []).map(ep => [ep.number, ep]));
+        const jikanMap = new Map((jikanResults || []).map(ep => [ep.number, ep]));
+
+        const fallbackThumb = anime.bannerUrl || anime.coverUrl;
+        const slice = [];
+
+        for (let num = startEpisodeNum; num < startEpisodeNum + count; num++) {
+            const kitsu = kitsuMap.get(num);
+            const jikan = jikanMap.get(num);
+
+            if (kitsu || jikan) {
+                let title = `Episode ${num}`;
+                if (kitsu?.title && !kitsu.title.match(/^episode\s*\d+$/i)) {
+                    title = kitsu.title;
+                } else if (jikan?.title && !jikan.title.match(/^episode\s*\d+$/i)) {
+                    title = jikan.title;
+                }
+
+                slice.push({
+                    number: num,
+                    title: title,
+                    fullTitle: `Episode ${num}: ${title}`,
+                    thumbnail: kitsu?.thumbnail || fallbackThumb,
+                    description: kitsu?.description || '',
+                    airDate: kitsu?.airDate || jikan?.airDate || null
+                });
+            }
+        }
+
+        return slice;
     }
 };

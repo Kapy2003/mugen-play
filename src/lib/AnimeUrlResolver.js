@@ -10,9 +10,9 @@ export const AnimeUrlResolver = {
      */
     getKnownEpisodeCount(title) {
         const titleText = (typeof title === 'string' ? title : (title?.english || title?.romaji || title?.name || '')).toLowerCase();
-        if (titleText.includes('one piece')) return 1150;
-        if (titleText.includes('detective conan') || titleText.includes('case closed')) return 1150;
-        if (titleText.includes('pokemon') || titleText.includes('pocket monster')) return 1200;
+        if (titleText.includes('one piece')) return 1200;
+        if (titleText.includes('detective conan') || titleText.includes('case closed')) return 1200;
+        if (titleText.includes('pokemon') || titleText.includes('pocket monster')) return 1300;
         if (titleText.includes('naruto')) return 500;
         if (titleText.includes('fairy tail')) return 328;
         if (titleText.includes('dragon ball z')) return 291;
@@ -63,36 +63,18 @@ export const AnimeUrlResolver = {
                 };
             }
 
-            // Direct HiAnime watch URL
-            const hianimeMatch = anime.url.match(/^(https?:\/\/hianime\.[^/]+)\/watch\/([^/?#]+)(?:\/ep-(\d+))?/i);
-            if (hianimeMatch) {
-                const baseOrigin = hianimeMatch[1];
-                const slug = hianimeMatch[2];
-                const targetEp = ep;
-                return {
-                    streamUrl: `${baseOrigin}/watch/${slug}/ep-${targetEp}`,
-                    episodesList: Array.from({ length: 26 }, (_, idx) => ({
-                        id: `hianime-ep-${idx + 1}`,
-                        number: idx + 1,
-                        title: `Episode ${idx + 1}`,
-                        url: `${baseOrigin}/watch/${slug}/ep-${idx + 1}`
-                    })),
-                    resolvedSlug: slug
-                };
-            }
-
-            // Direct /watch/slug/ep-1 or /watch/slug?ep=1 URL (e.g. AniKai or arbitrary streaming sites)
+            // Direct /watch/slug/ep-1 or /watch/slug?ep=1 URL (e.g. HiAnime, AniKai, or arbitrary streaming sites)
             const watchMatch = anime.url.match(/^(https?:\/\/[^/]+)\/watch\/([^/?#]+)(?:\/ep-(\d+)|\?ep=(\d+))?/i);
             if (watchMatch) {
                 const baseOrigin = watchMatch[1];
                 const slug = watchMatch[2];
-                const targetEp = ep;
                 const isSlashFormat = anime.url.includes('/ep-') || !anime.url.includes('?ep=');
-                const epUrl = isSlashFormat ? `${baseOrigin}/watch/${slug}/ep-${targetEp}` : `${baseOrigin}/watch/${slug}?ep=${targetEp}`;
+                const epUrl = isSlashFormat ? `${baseOrigin}/watch/${slug}/ep-${ep}` : `${baseOrigin}/watch/${slug}?ep=${ep}`;
+                const totalEpisodes = baseOrigin.includes('hianime') ? 26 : 24;
                 return {
                     streamUrl: epUrl,
-                    episodesList: Array.from({ length: 24 }, (_, idx) => ({
-                        id: `${slug}-ep-${idx + 1}`,
+                    episodesList: Array.from({ length: totalEpisodes }, (_, idx) => ({
+                        id: `${baseOrigin.includes('hianime') ? 'hianime' : slug}-ep-${idx + 1}`,
                         number: idx + 1,
                         title: `Episode ${idx + 1}`,
                         url: isSlashFormat ? `${baseOrigin}/watch/${slug}/ep-${idx + 1}` : `${baseOrigin}/watch/${slug}?ep=${idx + 1}`

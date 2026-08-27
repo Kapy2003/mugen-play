@@ -105,39 +105,47 @@ export const ExtensionHealthChecker = {
             }
         }
 
-        // 2. Primary Strategy: Browser Native Probe (mode: 'no-cors') on target candidates
-        for (const candidateUrl of targetUrls) {
-            try {
-                const controller = new AbortController();
-                const timer = setTimeout(() => controller.abort(), Math.min(timeoutMs, 3500));
+        // 2. Primary Strategy: Parallel Browser Native Probe (mode: 'no-cors')
+        try {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), Math.min(timeoutMs, 3500));
 
+            const probePromises = targetUrls.map(async (candidateUrl) => {
                 await fetch(candidateUrl, {
                     mode: 'no-cors',
                     cache: 'no-store',
                     signal: controller.signal
                 });
-                clearTimeout(timer);
+                return candidateUrl;
+            });
 
-                return {
-                    isHealthy: true,
-                    latency: Date.now() - startTime,
-                    activeUrl: candidateUrl
-                };
-            } catch {
-                // Fall through to DOM asset probe
-            }
+            const winner = await Promise.any(probePromises);
+            clearTimeout(timer);
+            try { controller.abort(); } catch {}
+            return {
+                isHealthy: true,
+                latency: Date.now() - startTime,
+                activeUrl: winner
+            };
+        } catch {
+            // Fall through to DOM asset probe
         }
 
-        // 3. Secondary Strategy: DOM Asset / Favicon Reachability Probe
-        for (const candidateUrl of targetUrls) {
-            const domAlive = await this.probeDomAsset(candidateUrl, 3000);
-            if (domAlive) {
-                return {
-                    isHealthy: true,
-                    latency: Date.now() - startTime,
-                    activeUrl: candidateUrl
-                };
-            }
+        // 3. Secondary Strategy: Parallel DOM Asset / Favicon Reachability Probe
+        try {
+            const domPromises = targetUrls.map(async (candidateUrl) => {
+                const alive = await this.probeDomAsset(candidateUrl, 2500);
+                if (!alive) throw new Error('DOM asset unreachable');
+                return candidateUrl;
+            });
+            const winner = await Promise.any(domPromises);
+            return {
+                isHealthy: true,
+                latency: Date.now() - startTime,
+                activeUrl: winner
+            };
+        } catch {
+            // Fall through to proxy check
         }
 
         // 4. Tertiary Strategy: Multi-Proxy Reachability Check with Cloudflare Detection

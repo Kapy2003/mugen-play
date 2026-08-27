@@ -11,6 +11,24 @@ const getPlayerType = (url) => {
     return 'iframe';
 };
 
+const isCleanStandaloneStream = (url) => {
+    if (!url || typeof url !== 'string') return false;
+    return Boolean(
+        url.match(/\.m3u8(\?.*)?$/i) ||
+        url.match(/\.(mp4|webm|ogg)(\?.*)?$/i) ||
+        url.includes('bibiemb') ||
+        url.includes('vivibebe') ||
+        url.includes('otakuhg') ||
+        url.includes('megacloud') ||
+        url.includes('rapid-cloud') ||
+        url.includes('playtaku') ||
+        url.includes('/embed/') ||
+        url.includes('/e/') ||
+        url.includes('player.php') ||
+        url.includes('streaming.php')
+    );
+};
+
 const VideoPlayer = ({
     src,
     poster,
@@ -28,10 +46,12 @@ const VideoPlayer = ({
     onRetry
 }) => {
     const cachedExtraction = IframeStreamExtractor.getCached(src);
-    const initialActiveSrc = cachedExtraction?.streamUrl || src;
-    const initialPlayerType = cachedExtraction?.type || getPlayerType(initialActiveSrc);
+    const initialIsClean = isCleanStandaloneStream(src) || Boolean(cachedExtraction?.streamUrl);
+    const initialActiveSrc = cachedExtraction?.streamUrl || (initialIsClean ? src : null);
+    const initialPlayerType = cachedExtraction?.type || getPlayerType(initialActiveSrc || src);
 
     const [activeSrc, setActiveSrc] = useState(initialActiveSrc);
+    const [isExtracting, setIsExtracting] = useState(!initialIsClean && Boolean(src));
     const [loadError, setLoadError] = useState(!src || src === 'null' || src === '' || (typeof src === 'string' && src.includes('undefined')));
     const [isRetrying, setIsRetrying] = useState(false);
     const [key, setKey] = useState(0);
@@ -57,7 +77,7 @@ const VideoPlayer = ({
     const videoRef = useRef(null);
     const hlsRef = useRef(null);
     const prevSrcPropRef = useRef(src);
-    const extractedSrcRef = useRef(cachedExtraction?.streamUrl || null);
+    const extractedSrcRef = useRef(cachedExtraction?.streamUrl || (initialIsClean ? src : null));
     const controlsTimerRef = useRef(null);
     const onEndedRef = useRef(onEnded);
     const onProgressRef = useRef(onProgress);
@@ -70,54 +90,102 @@ const VideoPlayer = ({
         onProgressRef.current = onProgress;
     }, [onProgress]);
 
-    // Handle incoming source changes (e.g. episode switch, anime switch, source switch)
+    // Single, Unified Source Resolution & Stream Extraction Effect (Ponytail Optimization)
     useEffect(() => {
-        if (src && src !== prevSrcPropRef.current) {
-            prevSrcPropRef.current = src;
+        if (!src || src === 'null' || src === '' || (typeof src === 'string' && src.includes('undefined'))) {
+            setLoadError(true);
+            setIsExtracting(false);
+            return;
+        }
 
-            if (src !== extractedSrcRef.current && src !== activeSrc) {
-                extractedSrcRef.current = null;
+        if (src !== extractedSrcRef.current && src !== activeSrc) {
+            setCustomUrlInput(src || '');
+            setQualities([]);
+            setCurrentQuality(-1);
 
-                const cached = IframeStreamExtractor.getCached(src);
-                if (cached?.streamUrl) {
-                    extractedSrcRef.current = cached.streamUrl;
-                    setActiveSrc(cached.streamUrl);
-                    setPlayerType(cached.type);
-                    if (cached.type === 'iframe') {
+            // 1. Instant Fast-Path: Cached or Standalone Stream
+            const cached = IframeStreamExtractor.getCached(src);
+            if (cached?.streamUrl) {
+                extractedSrcRef.current = cached.streamUrl;
+                setActiveSrc(cached.streamUrl);
+                setPlayerType(cached.type);
+                setIsExtracting(false);
+                setLoadError(false);
+                if (cached.type === 'iframe') {
+                    setLocalYOffset(0);
+                    setLocalScale(1);
+                }
+                if (onUpdateStreamUrl) onUpdateStreamUrl(cached.streamUrl);
+                return;
+            }
+
+            if (isCleanStandaloneStream(src)) {
+                extractedSrcRef.current = src;
+                setActiveSrc(src);
+                setPlayerType(getPlayerType(src));
+                setIsExtracting(false);
+                setLoadError(false);
+                return;
+            }
+
+            // 2. Background Extraction: Hide background site while extracting
+            let isCancelled = false;
+            setActiveSrc(null);
+            setIsExtracting(true);
+            setLoadError(false);
+
+            IframeStreamExtractor.fetchAndExtract(src).then(extracted => {
+                if (isCancelled) return;
+
+                if (extracted?.is404) {
+                    setLoadError(true);
+                    setIsExtracting(false);
+                    return;
+                }
+
+                if (extracted?.streamUrl) {
+                    extractedSrcRef.current = extracted.streamUrl;
+                    setActiveSrc(extracted.streamUrl);
+                    setPlayerType(extracted.type);
+                    setIsExtracting(false);
+                    setLoadError(false);
+                    if (extracted.type === 'iframe') {
                         setLocalYOffset(0);
                         setLocalScale(1);
                     }
+                    if (onUpdateStreamUrl) onUpdateStreamUrl(extracted.streamUrl);
                 } else {
-                    setActiveSrc(src);
-                    setPlayerType(getPlayerType(src));
+                    setIsExtracting(false);
+                    const isWatchUrl = Boolean(src.includes('/watch/') || src.includes('streaming.php') || src.includes('/play/'));
+                    if (isWatchUrl && (src.includes('season-3') || src.includes('season-4') || src.includes('upcoming'))) {
+                        setLoadError(true);
+                    } else {
+                        setActiveSrc(src);
+                        setPlayerType(getPlayerType(src));
+                    }
                 }
+            }).catch(() => {
+                if (!isCancelled) {
+                    setIsExtracting(false);
+                    setLoadError(true);
+                }
+            });
 
-                setCustomUrlInput(src || '');
-                setLoadError(!src || src === 'null' || src === '' || (typeof src === 'string' && src.includes('undefined')));
-                setQualities([]);
-                setCurrentQuality(-1);
-                setKey(k => k + 1);
-            }
+            return () => { isCancelled = true; };
         }
-    }, [src, activeSrc]);
+    }, [src, activeSrc, key]);
 
     // Auto-hide controls and quality button after 3 seconds of inactivity in maximized view
     const handleUserActivity = useCallback(() => {
         setShowControls(true);
-        if (controlsTimerRef.current) {
-            clearTimeout(controlsTimerRef.current);
-        }
-        controlsTimerRef.current = setTimeout(() => {
-            setShowControls(false);
-        }, 3000);
+        if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
+        controlsTimerRef.current = setTimeout(() => setShowControls(false), 3000);
     }, []);
 
     useEffect(() => {
         handleUserActivity();
         return () => {
-            if (controlsTimerRef.current) {
-                clearTimeout(controlsTimerRef.current);
-            }
+            if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
         };
     }, [handleUserActivity]);
 
@@ -126,81 +194,12 @@ const VideoPlayer = ({
         setIsRetrying(true);
         setLoadError(false);
         try {
-            if (onRetry) {
-                await onRetry();
-            }
+            if (onRetry) await onRetry();
         } finally {
             setKey(k => k + 1);
-            setTimeout(() => {
-                setIsRetrying(false);
-            }, 600);
+            setTimeout(() => setIsRetrying(false), 600);
         }
     };
-
-    // Automated Stream Iframe Extraction
-    useEffect(() => {
-        if (!activeSrc || activeSrc === 'null' || activeSrc === '' || (typeof activeSrc === 'string' && activeSrc.includes('undefined'))) {
-            setLoadError(true);
-            return;
-        }
-
-        // Direct video files or already extracted standalone embed streams don't need extraction
-        if (
-            activeSrc.match(/\.m3u8(\?.*)?$/i) ||
-            activeSrc.match(/\.(mp4|webm|ogg)(\?.*)?$/i) ||
-            activeSrc.includes('bibiemb') ||
-            activeSrc.includes('vivibebe') ||
-            activeSrc.includes('otakuhg') ||
-            activeSrc.includes('megacloud') ||
-            activeSrc.includes('rapid-cloud') ||
-            extractedSrcRef.current === activeSrc
-        ) {
-            return;
-        }
-
-        let isCancelled = false;
-
-        const extractStream = async () => {
-            try {
-                const extracted = await IframeStreamExtractor.fetchAndExtract(activeSrc);
-                if (isCancelled) return;
-
-                if (extracted?.is404) {
-                    console.warn('[VideoPlayer] 404 detected from stream extraction, triggering mascot screen');
-                    setLoadError(true);
-                    return;
-                }
-
-                if (extracted && extracted.streamUrl && extracted.streamUrl !== activeSrc) {
-                    console.log(`[VideoPlayer] Successfully extracted clean ${extracted.type} player:`, extracted.streamUrl);
-                    extractedSrcRef.current = extracted.streamUrl;
-                    setActiveSrc(extracted.streamUrl);
-                    setPlayerType(extracted.type);
-                    setLoadError(false);
-                    if (extracted.type === 'iframe') {
-                        setLocalYOffset(0);
-                        setLocalScale(1);
-                    }
-                    if (onUpdateStreamUrl) {
-                        onUpdateStreamUrl(extracted.streamUrl);
-                    }
-                } else if (!extracted) {
-                    // If extraction returned no video candidate, check if page is unplayable/unreleased
-                    const isWatchUrl = Boolean(activeSrc && (activeSrc.includes('/watch/') || activeSrc.includes('streaming.php') || activeSrc.includes('/play/')));
-                    if (isWatchUrl && (activeSrc.includes('season-3') || activeSrc.includes('season-4') || activeSrc.includes('upcoming'))) {
-                        console.warn('[VideoPlayer] No playable stream found on unreleased title, triggering mascot fallback');
-                        setLoadError(true);
-                    }
-                }
-            } catch (err) {
-                console.warn('[VideoPlayer] Stream extraction error:', err);
-            }
-        };
-
-        extractStream();
-
-        return () => { isCancelled = true; };
-    }, [activeSrc, key]);
 
     // Live sync viewport offsets and zoom without triggering player remount
     useEffect(() => {
@@ -343,13 +342,31 @@ const VideoPlayer = ({
     };
 
     const is404 = Boolean(loadError);
-    const isUnplayable = is404 ||
+    const isUnplayable = !isExtracting && (
+        is404 ||
         !activeSrc ||
         activeSrc === 'null' ||
         activeSrc === '' ||
-        activeSrc.includes('undefined');
+        activeSrc.includes('undefined')
+    );
 
     const renderPlayer = () => {
+        if (isExtracting) {
+            return (
+                <div className="w-full h-full flex flex-col items-center justify-center bg-[#0a0a0d] text-white gap-2.5 select-none animate-fade-in">
+                    <div className="relative flex items-center justify-center">
+                        <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-full border-2 border-red-500/20 border-t-red-600 animate-spin" />
+                        <div className="absolute inset-0 flex items-center justify-center text-red-500 font-black text-[11px] sm:text-xs">
+                            M
+                        </div>
+                    </div>
+                    <p className="text-[11px] sm:text-xs font-semibold text-gray-300 tracking-wide animate-pulse">
+                        Extracting stream...
+                    </p>
+                </div>
+            );
+        }
+
         if (isUnplayable) {
             if (isMinimized) {
                 return (

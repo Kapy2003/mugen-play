@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Play, Star, Calendar, Heart, Share2, X, List, LayoutGrid, Tv, Check } from 'lucide-react';
 import { formatAnimeTitle } from '../../lib/formatters';
+import { EpisodeMetadataService } from '../../lib/services/EpisodeMetadataService';
 
 const AnimeDetailModal = React.memo(({ anime, isOpen, onClose, onPlay, isFavorite, onToggleFavorite, showToast }) => {
     const isModalOpen = isOpen !== undefined ? Boolean(isOpen) : Boolean(anime);
@@ -8,8 +9,12 @@ const AnimeDetailModal = React.memo(({ anime, isOpen, onClose, onPlay, isFavorit
     const [episodeViewMode, setEpisodeViewMode] = useState('cards'); // 'cards' (thumbnails) or 'pills' (compact)
     const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
     const [copied, setCopied] = useState(false);
+    const [activeChunk, setActiveChunk] = useState(0);
+    const [enrichedMap, setEnrichedMap] = useState({});
     const modalContentRef = useRef(null);
     const touchStartRef = useRef(null);
+
+    const CHUNK_SIZE = 100;
 
     // Reset view state when opening a new anime
     useEffect(() => {
@@ -17,20 +22,46 @@ const AnimeDetailModal = React.memo(({ anime, isOpen, onClose, onPlay, isFavorit
             setShowTrailer(false);
             setIsDescriptionExpanded(false);
             setCopied(false);
+            setActiveChunk(0);
+            setEnrichedMap({});
             if (modalContentRef.current) {
                 modalContentRef.current.scrollTop = 0;
             }
         }
     }, [isModalOpen, anime?.id]);
 
+    // On-demand chunk enrichment: fetch metadata for the currently viewed range
+    useEffect(() => {
+        if (isModalOpen && anime) {
+            const chunkStart = activeChunk * CHUNK_SIZE + 1;
+            EpisodeMetadataService.enrichAnimeSlice(anime, chunkStart, CHUNK_SIZE).then(slice => {
+                if (slice && slice.length > 0) {
+                    setEnrichedMap(prev => {
+                        const updated = { ...prev };
+                        slice.forEach(ep => {
+                            if (ep.number) updated[ep.number] = ep;
+                        });
+                        return updated;
+                    });
+                }
+            }).catch(() => {});
+        }
+    }, [isModalOpen, anime?.id, activeChunk]);
+
     if (!isModalOpen || !anime) return null;
 
-    const episodes = anime.episodesList || Array.from({ length: anime.episodes || 12 }, (_, i) => ({
+    const baseEpisodes = anime.episodesList || Array.from({ length: anime.episodes || 12 }, (_, i) => ({
         number: i + 1,
         title: `Episode ${i + 1}`,
         thumbnail: anime.bannerUrl || anime.coverUrl,
         site: 'MugenStream'
     }));
+
+    const episodes = baseEpisodes.map(ep => enrichedMap[ep.number] ? { ...ep, ...enrichedMap[ep.number] } : ep);
+    const totalChunks = Math.ceil(episodes.length / CHUNK_SIZE);
+    const visibleEpisodes = totalChunks > 1
+        ? episodes.slice(activeChunk * CHUNK_SIZE, (activeChunk + 1) * CHUNK_SIZE)
+        : episodes;
 
     const displayTitle = formatAnimeTitle(anime.title || anime.name);
     const coverSrc = anime.coverUrl || anime.image || anime.coverImage?.large;
@@ -81,7 +112,7 @@ const AnimeDetailModal = React.memo(({ anime, isOpen, onClose, onPlay, isFavorit
         return `${hours}h ${minutes}m`;
     };
 
-    // Universal robust Share handler (Copies direct anime deep-link on all platforms + mobile native share)
+    // Universal robust Share handler
     const handleShare = async () => {
         const title = displayTitle || 'Mugen Play';
         const baseUrl = window.location.origin + window.location.pathname;
@@ -99,57 +130,57 @@ const AnimeDetailModal = React.memo(({ anime, isOpen, onClose, onPlay, isFavorit
             }
         }
 
-        // 2. Fallback via temporary textarea
+        // 2. Fallback textarea
         if (!copyDone) {
             try {
-                const textArea = document.createElement('textarea');
-                textArea.value = shareUrl;
-                textArea.style.position = 'fixed';
-                textArea.style.top = '0';
-                textArea.style.left = '0';
-                textArea.style.opacity = '0';
-                textArea.style.pointerEvents = 'none';
-                document.body.appendChild(textArea);
-                textArea.focus();
-                textArea.select();
-                copyDone = document.execCommand('copy');
-                document.body.removeChild(textArea);
-            } catch {
+                const textarea = document.createElement('textarea');
+                textarea.value = shareUrl;
+                textarea.style.position = 'fixed';
+                textarea.style.opacity = '0';
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textarea);
                 copyDone = true;
+            } catch {
+                // fallback below
             }
         }
 
-        // Trigger UI feedback
-        setCopied(true);
-        if (showToast) {
-            showToast(`Link copied to clipboard!`, 'success');
-        }
-        setTimeout(() => setCopied(false), 2500);
-
-        // 3. Trigger native mobile share dialog if on mobile device
+        // 3. Optional Mobile Web Share API
         if (navigator.share && /mobile|android|iphone|ipad/i.test(navigator.userAgent)) {
             try {
                 await navigator.share({
-                    title,
-                    text: `Watch ${title} on Mugen Play`,
+                    title: `Watch ${title} on Mugen Play`,
+                    text: `Stream ${title} on Mugen Play with fast servers!`,
                     url: shareUrl
                 });
-            } catch {
-                // User cancelled or share dismissed
+                return;
+            } catch (err) {
+                if (err.name === 'AbortError') return;
+            }
+        }
+
+        if (copyDone) {
+            setCopied(true);
+            if (showToast) {
+                showToast(`Share link copied: ${title}`, 'success');
+            }
+            setTimeout(() => setCopied(false), 2500);
+        } else {
+            if (showToast) {
+                showToast('Unable to copy link', 'error');
             }
         }
     };
 
     return (
         <div className="anime-modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md animate-fade-in">
-            {/* Outer card with strict overflow-hidden preserving rounded corners on all sides */}
             <div
                 className="anime-modal-container relative w-full max-w-3xl max-h-[88vh] sm:max-h-[90vh] bg-[#101014] rounded-2xl sm:rounded-3xl shadow-2xl border border-white/10 animate-scale-in flex flex-col overflow-hidden"
             >
-                {/* Mobile Pull Bar Indicator */}
                 <div className="sm:hidden absolute top-2.5 left-1/2 -translate-x-1/2 w-12 h-1 bg-white/30 rounded-full z-30 pointer-events-none" />
 
-                {/* High-Contrast Close Button */}
                 <button
                     onClick={onClose}
                     className="anime-modal-close-btn absolute top-3.5 right-3.5 sm:top-4 sm:right-4 p-2.5 rounded-full bg-black/70 backdrop-blur-md hover:bg-black/90 text-white hover:text-red-400 z-40 border border-white/15 cursor-pointer shadow-xl active:scale-95 transition-all flex items-center justify-center"
@@ -158,14 +189,12 @@ const AnimeDetailModal = React.memo(({ anime, isOpen, onClose, onPlay, isFavorit
                     <X className="w-5 h-5 stroke-[2.5]" />
                 </button>
 
-                {/* Inner Scroll Container */}
                 <div
                     ref={modalContentRef}
                     onTouchStart={handleTouchStart}
                     onTouchEnd={handleTouchEnd}
                     className="w-full h-full overflow-y-auto no-scrollbar smooth-transition touch-pan-y overscroll-contain"
                 >
-                    {/* Banner / Large Interactive Trailer Viewport */}
                     <div className={`${showTrailer && anime.trailer?.site === 'youtube' ? 'h-80 sm:h-[420px] md:h-[480px] min-h-[300px]' : 'h-36 sm:h-52'} relative overflow-hidden group bg-gray-950 touch-pan-y transition-all duration-500`}>
                         {bannerSrc ? (
                             <img
@@ -199,10 +228,8 @@ const AnimeDetailModal = React.memo(({ anime, isOpen, onClose, onPlay, isFavorit
                         )}
                     </div>
 
-                    {/* Content Section (Full clear opacity) */}
                     <div className={`px-4 sm:px-8 pb-6 relative z-10 transition-all duration-300 opacity-100 ${showTrailer ? 'mt-6' : '-mt-12 sm:-mt-16'}`}>
                         <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
-                            {/* Poster Image */}
                             <div className="shrink-0 mx-auto sm:mx-0 group perspective-1000">
                                 <div className="relative w-28 sm:w-40 aspect-[2/3] rounded-xl sm:rounded-2xl overflow-hidden shadow-2xl border-2 sm:border-4 border-[#101014] group-hover:scale-105 transition-transform duration-300 will-change-transform bg-gray-800">
                                     {coverSrc ? (
@@ -220,7 +247,6 @@ const AnimeDetailModal = React.memo(({ anime, isOpen, onClose, onPlay, isFavorit
                                 </div>
                             </div>
 
-                            {/* Info */}
                             <div className="flex-1 space-y-3 pt-1 sm:pt-4">
                                 <div>
                                     <h2 className="modal-title text-lg sm:text-2xl font-black text-white leading-snug mb-2 tracking-tight">
@@ -260,7 +286,6 @@ const AnimeDetailModal = React.memo(({ anime, isOpen, onClose, onPlay, isFavorit
                                     </div>
                                 )}
 
-                                {/* Synopsis */}
                                 <div
                                     onClick={() => setIsDescriptionExpanded(!isDescriptionExpanded)}
                                     className="cursor-pointer group"
@@ -273,7 +298,6 @@ const AnimeDetailModal = React.memo(({ anime, isOpen, onClose, onPlay, isFavorit
                                     </span>
                                 </div>
 
-                                {/* Action Buttons */}
                                 <div className="flex flex-wrap gap-2 pt-1">
                                     <button
                                         disabled={!hasPlayableEpisode}
@@ -306,7 +330,6 @@ const AnimeDetailModal = React.memo(({ anime, isOpen, onClose, onPlay, isFavorit
                                                     ? 'bg-red-600/20 border-red-500/50 text-red-400 ring-1 ring-red-500'
                                                     : 'bg-white/5 hover:bg-white/10 text-white border-white/10'
                                             }`}
-                                            title={showTrailer ? 'Close Trailer View' : 'Watch Official Trailer'}
                                         >
                                             <Tv className="w-4 h-4" />
                                             <span>{showTrailer ? 'Hide Trailer' : 'Watch Trailer'}</span>
@@ -319,7 +342,6 @@ const AnimeDetailModal = React.memo(({ anime, isOpen, onClose, onPlay, isFavorit
                                                 ? 'bg-emerald-600/20 border-emerald-500/50 text-emerald-400 ring-1 ring-emerald-500'
                                                 : 'bg-white/5 hover:bg-white/10 text-white border-white/10'
                                         }`}
-                                        title={copied ? 'Link Copied to Clipboard!' : 'Share Anime'}
                                     >
                                         {copied ? <Check className="w-4 h-4 text-emerald-400 stroke-[2.5]" /> : <Share2 className="w-4 h-4" />}
                                         <span>{copied ? 'Copied!' : 'Share'}</span>
@@ -328,9 +350,8 @@ const AnimeDetailModal = React.memo(({ anime, isOpen, onClose, onPlay, isFavorit
                             </div>
                         </div>
 
-                        {/* Rich Episodes Section */}
                         <div className="mt-6 pt-5 border-t border-white/10">
-                            <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center justify-between mb-3">
                                 <div className="flex items-center gap-2">
                                     <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
                                         Episodes
@@ -346,32 +367,50 @@ const AnimeDetailModal = React.memo(({ anime, isOpen, onClose, onPlay, isFavorit
                                     )}
                                 </div>
 
-                                {/* View Mode Toggle: Cards (Thumbnails) vs Pills */}
                                 <div className="flex items-center gap-1 bg-white/5 p-1 rounded-xl border border-white/10">
                                     <button
                                         onClick={() => setEpisodeViewMode('cards')}
                                         className={`p-1.5 rounded-lg transition-all cursor-pointer ${episodeViewMode === 'cards' ? 'bg-red-600 text-white shadow' : 'text-gray-400 hover:text-white'}`}
-                                        title="Thumbnails & Titles View"
                                     >
                                         <LayoutGrid className="w-3.5 h-3.5" />
                                     </button>
                                     <button
                                         onClick={() => setEpisodeViewMode('pills')}
                                         className={`p-1.5 rounded-lg transition-all cursor-pointer ${episodeViewMode === 'pills' ? 'bg-red-600 text-white shadow' : 'text-gray-400 hover:text-white'}`}
-                                        title="Compact Numbers View"
                                     >
                                         <List className="w-3.5 h-3.5" />
                                     </button>
                                 </div>
                             </div>
 
-                            {/* Cards View: Thumbnails + Episode Names */}
+                            {totalChunks > 1 && (
+                                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-2.5 mb-2">
+                                    {Array.from({ length: totalChunks }, (_, i) => {
+                                        const start = i * CHUNK_SIZE + 1;
+                                        const end = Math.min(episodes.length, (i + 1) * CHUNK_SIZE);
+                                        const isSelected = activeChunk === i;
+                                        return (
+                                            <button
+                                                key={i}
+                                                onClick={() => setActiveChunk(i)}
+                                                className={`px-3 py-1 rounded-xl text-[11px] font-bold whitespace-nowrap transition-all border cursor-pointer active:scale-95 ${
+                                                    isSelected
+                                                        ? 'bg-red-600 border-red-500 text-white shadow-md'
+                                                        : 'bg-white/5 hover:bg-white/10 text-gray-300 border-white/10'
+                                                }`}
+                                            >
+                                                {start} - {end}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            )}
+
                             {episodeViewMode === 'cards' && (
                                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 max-h-72 sm:max-h-80 overflow-y-auto pr-1 no-scrollbar">
-                                    {episodes.map((ep) => {
+                                    {visibleEpisodes.map((ep) => {
                                         const epNum = ep.number;
                                         const released = isEpisodeReleased(epNum);
-
                                         return (
                                             <button
                                                 key={epNum}
@@ -416,13 +455,11 @@ const AnimeDetailModal = React.memo(({ anime, isOpen, onClose, onPlay, isFavorit
                                 </div>
                             )}
 
-                            {/* Pills View: Compact Number Grid */}
                             {episodeViewMode === 'pills' && (
                                 <div className="grid grid-cols-6 sm:grid-cols-8 md:grid-cols-10 gap-1.5 max-h-48 overflow-y-auto pr-1 no-scrollbar">
-                                    {episodes.map((ep) => {
+                                    {visibleEpisodes.map((ep) => {
                                         const epNum = ep.number;
                                         const released = isEpisodeReleased(epNum);
-
                                         return (
                                             <button
                                                 key={epNum}

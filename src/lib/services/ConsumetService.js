@@ -21,7 +21,7 @@ export const ConsumetService = {
      * @param {number} timeoutMs - Timeout per mirror request
      * @returns {Promise<Object|null>}
      */
-    async fetchAnimeInfo(anilistId, timeoutMs = 4000) {
+    async fetchAnimeInfo(anilistId, timeoutMs = 3500) {
         if (!anilistId) return null;
         const id = anilistId.toString().trim();
         const cacheKey = `info_${id}`;
@@ -31,37 +31,36 @@ export const ConsumetService = {
             return cached.data;
         }
 
-        for (const mirror of this.MIRRORS) {
-            try {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-                const endpoint = `${mirror}/meta/anilist/info/${id}`;
-                const res = await fetch(endpoint, {
+        try {
+            const promises = this.MIRRORS.map(async (mirror) => {
+                const res = await fetch(`${mirror}/meta/anilist/info/${id}`, {
                     signal: controller.signal,
                     headers: { 'Accept': 'application/json' }
                 });
-                clearTimeout(timeoutId);
-
-                if (!res.ok) continue;
+                if (!res.ok) throw new Error(`Mirror ${res.status}`);
                 const data = await res.json();
-
-                if (data && (Array.isArray(data.episodes) || data.id)) {
-                    // Keep cache bounded
-                    if (this.cache.size > 100) {
-                        const oldestKey = this.cache.keys().next().value;
-                        this.cache.delete(oldestKey);
-                    }
-                    this.cache.set(cacheKey, { data, timestamp: Date.now() });
-                    return data;
+                if (!data || (!Array.isArray(data.episodes) && !data.id)) {
+                    throw new Error('Invalid metadata');
                 }
-            } catch (err) { // eslint-disable-line no-unused-vars
-                // Mirror failed or timed out, attempt next mirror
-                continue;
-            }
-        }
+                return data;
+            });
 
-        return null;
+            const data = await Promise.any(promises);
+            clearTimeout(timeoutId);
+            try { controller.abort(); } catch {}
+
+            if (this.cache.size > 100) {
+                this.cache.delete(this.cache.keys().next().value);
+            }
+            this.cache.set(cacheKey, { data, timestamp: Date.now() });
+            return data;
+        } catch {
+            clearTimeout(timeoutId);
+            return null;
+        }
     },
 
     /**
